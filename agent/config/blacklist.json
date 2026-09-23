@@ -1,0 +1,18 @@
+{
+  "blacklisted_processes": [
+    "1password.exe",
+    "keepass.exe",
+    "bitwarden.exe",
+    "nordpass.exe",
+    "signal.exe",
+    "tor.exe"
+  ],
+  "blacklisted_window_titles": [
+    "Sign In",
+    "Password",
+    "Bank of America",
+    "Chase Online",
+    "Wells Fargo",
+    "Authentication Required"
+  ]
+}
