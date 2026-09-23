@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: monitor_api
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=db
+      - DB_NAME=endpoint_monitor
+      - DB_USER=postgresadmin
+      - DB_PASS=postgrespassword
+      - S3_BUCKET=local-test-bucket
+      - AWS_DEFAULT_REGION=us-east-1
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16-alpine
+    container_name: monitor_postgres
+    environment:
+      POSTGRES_DB: endpoint_monitor
+      POSTGRES_USER: postgresadmin
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../database/schema.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  pgdata:
