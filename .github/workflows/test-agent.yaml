@@ -1,0 +1,25 @@
+name: CI - Client Agent Tests
+
+on:
+  push:
+    paths:
+      - 'agent/**'
+      - '.github/workflows/test-agent.yml'
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Dependencies
+        run: |
+          pip install pytest flake8
+          pip install -r agent/requirements.txt
+      - name: Execute PyTest Suite
+        run: |
+          pytest agent/tests
