@@ -3,9 +3,11 @@ import platform
 import socket
 import getpass
 import psutil
+import threading
+import time
 from typing import Dict, Any, Optional
 
-# Optional native Windows API bindings for Active Window Detection (Task 5)
+# Win32 bindings for foreground window detection (Task 5)
 try:
     import win32gui
     import win32process
@@ -17,13 +19,51 @@ except ImportError:
 try:
     from src.core.privacy_filter import PrivacyFilter
 except ImportError:
-    # Local fallback for standalone testing if path is not resolved
     from privacy_filter import PrivacyFilter
 
 
 class ActivityTracker:
-    def __init__(self):
+    def __init__(self, poll_interval: float = 2.0):
         self.privacy_filter = PrivacyFilter()
+        self.poll_interval = poll_interval
+        
+        # Threading lifecycle management
+        self._running = False
+        self._thread: Optional[threading.Thread] = None
+        self._lock = threading.Lock()
+        
+        # Activity metrics counters (KPM / keystrokes / mouse activity)
+        self.keystroke_count = 0
+        self.mouse_click_count = 0
+        
+        # In-memory snapshot cache
+        self.current_snapshot: Dict[str, Any] = {}
+
+    def record_keystroke(self):
+        """Thread-safe increment of keystroke counts."""
+        with self._lock:
+            self.keystroke_count += 1
+
+    def record_mouse_click(self):
+        """Thread-safe increment of mouse clicks."""
+        with self._lock:
+            self.mouse_click_count += 1
+
+    def get_and_reset_activity(self) -> Dict[str, int]:
+        """
+        Retrieves active keystroke/activity rates and resets
+        counters for the next polling interval.
+        """
+        with self._lock:
+            activity = {
+                "keystrokes": self.keystroke_count,
+                "mouse_clicks": self.mouse_click_count,
+                "kpm": self.keystroke_count  # Keystrokes per interval/minute window
+            }
+            # Reset counters
+            self.keystroke_count = 0
+            self.mouse_click_count = 0
+            return activity
 
     def get_system_metrics(self) -> Dict[str, Any]:
         """Collects OS, Host, and hardware utilization metrics (Tasks 3 & 4)."""
@@ -40,9 +80,7 @@ class ActivityTracker:
         }
 
     def get_active_window(self) -> Dict[str, str]:
-        """
-        Detects the current foreground window title and active process (Task 5).
-        """
+        """Detects current foreground window and process (Task 5)."""
         app_name = "Unknown"
         raw_title = "Unknown"
 
@@ -71,10 +109,37 @@ class ActivityTracker:
         }
 
     def get_snapshot(self) -> Dict[str, Any]:
-        """Consolidates metrics, active app, and privacy redaction for demonstration."""
+        """Consolidates metrics, active app, and privacy redaction matching backend schema."""
         metrics = self.get_system_metrics()
-        active_app = self.get_active_window()
+        active_app_data = self.get_active_window()
+
         return {
             **metrics,
-            **active_app
+            **active_app_data,
+            "endpoint_id": 1,  # Backend schema expects an integer foreign key
+            "active_app": active_app_data.get("app_name", "Unknown"),
         }
+
+    def _monitor_loop(self):
+        """Background thread polling loop."""
+        while self._running:
+            try:
+                self.current_snapshot = self.get_snapshot()
+            except Exception as e:
+                print(f"[TRACKER ERROR] {e}")
+            time.sleep(self.poll_interval)
+
+    def start(self):
+        """Starts background tracking thread."""
+        if not self._running:
+            self._running = True
+            self._thread = threading.Thread(target=self._monitor_loop, daemon=True)
+            self._thread.start()
+            print("[ACTIVITY TRACKER] Background monitor loop started.")
+
+    def stop(self):
+        """Stops background tracking thread cleanly."""
+        self._running = False
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=1.0)
+            print("[ACTIVITY TRACKER] Background monitor loop stopped.")
