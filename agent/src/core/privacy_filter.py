@@ -51,6 +51,7 @@ class PrivacyFilter:
             return ""
         redacted = self.cc_pattern.sub("[REDACTED_CARD]", text)
         redacted = self.ssn_pattern.sub("[REDACTED_SSN]", redacted)
+        
         # Keeps the key name (e.g. password=) but redacts the secret value
         redacted = self.password_pattern.sub(r"\1=[REDACTED_SECRET]", redacted)
         return redacted
