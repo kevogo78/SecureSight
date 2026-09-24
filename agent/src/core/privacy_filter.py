@@ -11,6 +11,10 @@ class PrivacyFilter:
         # Precompiled RegEx patterns for DLP detection
         self.cc_pattern = re.compile(r'\b(?:\d{4}[-\s]?){3}\d{4}\b')
         self.ssn_pattern = re.compile(r'\b\d{3}-\d{2}-\d{4}\b')
+        # Captures variations like password=..., pwd: ..., secret=..., token=...
+        self.password_pattern = re.compile(
+            r'(?i)\b(password|passwd|pwd|secret|token|api[_-]?key)\s*[:=]\s*(\S+)'
+        )
 
     def load_blacklist(self, path: str):
         if os.path.exists(path):
@@ -20,11 +24,6 @@ class PrivacyFilter:
                 self.blacklist_titles = [t.lower() for t in data.get("blacklisted_window_titles", [])]
 
     def evaluate_environment(self, active_process: str, active_title: str) -> tuple[bool, str]:
-        """
-        Evaluates whether monitoring should be suspended.
-        Returns:
-            tuple: (is_sensitive: bool, status_reason: str)
-        """
         p_name = active_process.lower()
         if any(b in p_name for b in self.blacklist_processes):
             return True, "Process_Blacklisted"
@@ -42,4 +41,16 @@ class PrivacyFilter:
             return True, "DLP_Credit_Card_Pattern"
         if self.ssn_pattern.search(text):
             return True, "DLP_SSN_Pattern"
+        if self.password_pattern.search(text):
+            return True, "DLP_Credential_Pattern"
         return False, "Clean"
+
+    def sanitize(self, text: str) -> str:
+        """Redacts DLP patterns (SSN, Credit Cards, Secrets) from text/titles."""
+        if not text:
+            return ""
+        redacted = self.cc_pattern.sub("[REDACTED_CARD]", text)
+        redacted = self.ssn_pattern.sub("[REDACTED_SSN]", redacted)
+        # Keeps the key name (e.g. password=) but redacts the secret value
+        redacted = self.password_pattern.sub(r"\1=[REDACTED_SECRET]", redacted)
+        return redacted
