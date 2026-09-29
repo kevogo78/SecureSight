@@ -6,6 +6,14 @@ class PrivacyFilter:
     def __init__(self, config_path: str = "config/blacklist.json"):
         self.blacklist_processes = []
         self.blacklist_titles = []
+        
+        # Resolve path relative to agent directory if not found in current working directory
+        if not os.path.exists(config_path):
+            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+            candidate = os.path.join(base_dir, config_path)
+            if os.path.exists(candidate):
+                config_path = candidate
+
         self.load_blacklist(config_path)
 
         # Precompiled RegEx patterns for DLP detection
