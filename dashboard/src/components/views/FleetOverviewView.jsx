@@ -13,20 +13,12 @@ export default function FleetOverviewView({
   onNavigate, 
   onRefresh, 
   isRefreshing, 
-<<<<<<< HEAD
-  onViewScreenshot
-}) {
-  const totalCount = endpoints.length;
-  const onlineCount = endpoints.filter(e => e.status === 'Online').length;
-  const offlineCount = endpoints.filter(e => e.status === 'Offline' || e.status?.includes('Kicked')).length;
-=======
   onViewScreenshot,
   onOpenConsentModal 
 }) {
   const totalCount = endpoints.length;
   const onlineCount = endpoints.filter(e => e.status === 'Online').length;
   const offlineCount = endpoints.filter(e => e.status === 'Offline').length;
->>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
   const uniqueAppsCount = new Set(endpoints.map(e => e.app).filter(Boolean)).size;
   const dlpCount = logs.filter(l => l.dlp_flag || l.filter_status !== 'Clean').length;
 
@@ -42,21 +34,14 @@ export default function FleetOverviewView({
           <h2 className="text-2xl font-black tracking-tight">Endpoint Privacy &amp; Compliance Control</h2>
           <p className="text-xs text-slate-300 mt-1 max-w-xl">
             {totalCount > 0
-<<<<<<< HEAD
-              ? `Live observability active across ${totalCount} monitored workstations. All client telemetry and screen captures are transmitted after user consent authorization.`
-              : 'Endpoints appear automatically in real-time when the EDMT Agent executable is launched on a workstation and the user accepts consent.'
-=======
               ? `Live observability active across ${totalCount} monitored workstations. All client screen captures and events are sanitized via local DLP prior to AWS S3 ingestion.`
               : 'By policy, endpoints only appear once explicit user consent is granted via the Agent Consent UI dialog. Click "Run Consent UI" to simulate or authorize a workstation.'
->>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
             }
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
-<<<<<<< HEAD
-=======
             onClick={onOpenConsentModal}
             className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-bold transition cursor-pointer"
           >
@@ -64,7 +49,6 @@ export default function FleetOverviewView({
             <span>Run Consent UI</span>
           </button>
           <button
->>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
             onClick={onRefresh}
             disabled={isRefreshing}
             className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-bold transition cursor-pointer"
@@ -168,16 +152,6 @@ export default function FleetOverviewView({
             </div>
             <h5 className="text-sm font-bold text-slate-900">No Authorized Endpoints Available</h5>
             <p className="text-xs text-slate-500 leading-relaxed">
-<<<<<<< HEAD
-              Workstations will appear here automatically when the EDMT Agent is run on an endpoint machine and the user grants consent.
-            </p>
-            <div className="pt-2">
-              <button
-                onClick={() => onNavigate('endpoints')}
-                className="inline-flex items-center gap-2 bg-[#22c55e] hover:bg-[#16a34a] text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
-              >
-                <span>View Endpoints &amp; Installers →</span>
-=======
               Workstations will not appear on this dashboard unless user consent is authorized through the Agent Consent UI dialog.
             </p>
             <div className="pt-2">
@@ -187,7 +161,6 @@ export default function FleetOverviewView({
               >
                 <ShieldCheck className="w-4 h-4" />
                 <span>Run Agent Consent UI</span>
->>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
               </button>
             </div>
           </div>
