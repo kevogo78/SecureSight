@@ -139,6 +139,7 @@ export const INITIAL_LOGS = [
   }
 ];
 
+<<<<<<< HEAD
 export const getKickedEndpointIds = () => {
   try {
     const raw = localStorage.getItem('edmt_kicked_endpoints');
@@ -167,16 +168,23 @@ export const saveKickedEndpointId = (endpointId) => {
 
 export const getConsentedEndpoints = () => {
   const kicked = getKickedEndpointIds();
+=======
+export const getConsentedEndpoints = () => {
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
   try {
     const raw = localStorage.getItem('edmt_consented_endpoints');
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
+<<<<<<< HEAD
         return parsed.filter(
           ep => ep.consent_granted === true && 
           !ep.name.toLowerCase().includes('ubuntu') &&
           !kicked.includes(String(ep.endpoint_id))
         );
+=======
+        return parsed.filter(ep => ep.consent_granted === true && !ep.name.toLowerCase().includes('ubuntu'));
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
       }
     }
   } catch {
@@ -186,6 +194,7 @@ export const getConsentedEndpoints = () => {
 };
 
 export const saveConsentedEndpoints = (endpoints) => {
+<<<<<<< HEAD
   const kicked = getKickedEndpointIds();
   try {
     const valid = endpoints.filter(
@@ -193,12 +202,17 @@ export const saveConsentedEndpoints = (endpoints) => {
       !ep.name.toLowerCase().includes('ubuntu') &&
       !kicked.includes(String(ep.endpoint_id))
     );
+=======
+  try {
+    const valid = endpoints.filter(ep => ep.consent_granted === true && !ep.name.toLowerCase().includes('ubuntu'));
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
     localStorage.setItem('edmt_consented_endpoints', JSON.stringify(valid));
   } catch (e) {
     console.warn('Failed to save consented endpoints:', e);
   }
 };
 
+<<<<<<< HEAD
 export const kickEndpointApi = async (endpointId) => {
   saveKickedEndpointId(endpointId);
   try {
@@ -226,6 +240,8 @@ export const fetchEndpoints = async () => {
   return getConsentedEndpoints();
 };
 
+=======
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
 export const getAuditLogs = async (limit = 100) => {
   try {
     const response = await api.get(`/audit/logs?limit=${limit}`);

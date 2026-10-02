@@ -2,8 +2,12 @@ import React, { useState } from 'react';
 import { 
   Monitor, ChevronRight, Cpu, LayoutDashboard, HardDrive, Wifi, 
   ArrowDown, ArrowUp, Key, Camera, Video, Clock, CheckCircle2, 
+<<<<<<< HEAD
   ShieldCheck, AlertTriangle, ExternalLink, Globe, FileText, ArrowLeft,
   UserX, ToggleLeft, ToggleRight, ShieldAlert
+=======
+  ShieldCheck, AlertTriangle, ExternalLink, Globe, FileText, ArrowLeft
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar 
@@ -14,6 +18,7 @@ export default function EndpointDetailView({
   onBack, 
   logs = [], 
   onViewScreenshot, 
+<<<<<<< HEAD
   onViewRecording,
   onKickEndpoint
 }) {
@@ -43,6 +48,12 @@ export default function EndpointDetailView({
     try { localStorage.setItem('edmt_record_session', String(val)); } catch (e) {}
   };
 
+=======
+  onViewRecording 
+}) {
+  const [activeSubTab, setActiveSubTab] = useState('activity'); // 'activity', 'applications', 'websites', 'keylogs', 'screenshots', 'system'
+
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
   if (!endpoint) return null;
 
   // Filter logs for this specific endpoint
@@ -50,11 +61,33 @@ export default function EndpointDetailView({
   const latestLog = endpointLogs[0] || {};
 
   // Live or latest metrics
+<<<<<<< HEAD
   const cpuVal = latestLog.cpu_percent !== undefined ? latestLog.cpu_percent : (endpoint.cpu || 0);
   const ramVal = latestLog.ram_percent !== undefined ? latestLog.ram_percent : (endpoint.ram || 0);
   const diskVal = endpoint.disk || 42;
   const activeApp = latestLog.active_app || endpoint.app || 'Idle';
 
+=======
+  const cpuVal = latestLog.cpu_percent !== undefined ? latestLog.cpu_percent : endpoint.cpu;
+  const ramVal = latestLog.ram_percent !== undefined ? latestLog.ram_percent : endpoint.ram;
+  const diskVal = endpoint.disk || 42;
+  const activeApp = latestLog.active_app || endpoint.app || 'Idle';
+
+  // Active Fleet Configuration Toggles
+  const captureKeysToFile = (() => {
+    try { return localStorage.getItem('edmt_capture_keys_to_file') === 'true'; } catch { return false; }
+  })();
+  const keylogFilePath = (() => {
+    try { return localStorage.getItem('edmt_keylog_path') || 'agent/keystrokes_audit.txt'; } catch { return 'agent/keystrokes_audit.txt'; }
+  })();
+  const recordSession = (() => {
+    try { return localStorage.getItem('edmt_record_session') !== 'false'; } catch { return true; }
+  })();
+  const recordingQuality = (() => {
+    try { return localStorage.getItem('edmt_recording_quality') || '720p @ 1 FPS (Free Tier Safe)'; } catch { return '720p @ 1 FPS (Free Tier Safe)'; }
+  })();
+
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
   // Telemetry time-series chart data
   const telemetryHistory = [
     { time: '10m ago', cpu: Math.max(5, cpuVal - 4), ram: Math.max(10, ramVal - 2) },
@@ -135,6 +168,7 @@ export default function EndpointDetailView({
             <Video className="w-4 h-4" />
             <span>Session Stream</span>
           </button>
+<<<<<<< HEAD
           <button
             onClick={() => {
               if (window.confirm(`Are you sure you want to kick and disconnect "${endpoint.name}" from active monitoring?`)) {
@@ -148,6 +182,8 @@ export default function EndpointDetailView({
             <UserX className="w-4 h-4 text-red-600" />
             <span>Kick Endpoint</span>
           </button>
+=======
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
         </div>
       </div>
 
@@ -383,6 +419,7 @@ export default function EndpointDetailView({
         </div>
       )}
 
+<<<<<<< HEAD
       {/* SUB-TAB CONTENT 4: KEYLOGS (Cybersecurity Keystroke Audit & Controls) */}
       {activeSubTab === 'keylogs' && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-6">
@@ -474,6 +511,34 @@ export default function EndpointDetailView({
               Hardware keystroke logs and activity intensity (KPM) are captured directly by the endpoint agent via <code className="font-mono font-bold bg-slate-200 px-1 py-0.5 rounded">pynput</code> keyboard listener. Sensitive password inputs in blacklisted applications are automatically sanitized by the local DLP engine prior to cloud transmission.
             </div>
           </div>
+=======
+      {/* SUB-TAB CONTENT 4: KEYLOGS (Zero-Logging Architecture / File Capture Toggle) */}
+      {activeSubTab === 'keylogs' && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-5">
+          {captureKeysToFile ? (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-900">
+                <p className="font-bold">Keystroke Text File Audit Logging: ACTIVE</p>
+                <p className="mt-1 leading-relaxed">
+                  Administrator toggle is currently writing unmasked keystrokes directly to local file: <code className="font-mono font-bold bg-amber-100 px-1 py-0.5 rounded">{keylogFilePath}</code>.
+                  This setting enables hardware key event recording for administrative diagnostic auditing.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
+              <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="text-xs text-emerald-900">
+                <p className="font-bold">Zero-Keystroke Privacy Architecture Guarantee</p>
+                <p className="mt-1 leading-relaxed">
+                  By capstone design, the monitoring agent does <strong>NOT</strong> record raw character keystrokes, letters, or passphrases.
+                  Only aggregate <strong>Keystrokes Per Minute (KPM)</strong> activity rates are transmitted to protect passwords and confidential user communications.
+                </p>
+              </div>
+            </div>
+          )}
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
 
           <h4 className="font-bold text-sm text-slate-900">Keystroke Intensity Index (KPM)</h4>
           <div className="overflow-x-auto">
@@ -515,6 +580,7 @@ export default function EndpointDetailView({
             <span className="text-xs text-slate-500">Stored in AWS S3 with AES-256 Server-Side Encryption</span>
           </div>
 
+<<<<<<< HEAD
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-3">
               <label className="relative inline-flex items-center cursor-pointer">
@@ -530,6 +596,12 @@ export default function EndpointDetailView({
                 <Video className="w-4 h-4 text-emerald-600" />
                 <span>Session Video Stream: <strong className={recordSession ? 'text-emerald-700' : 'text-slate-500'}>{recordSession ? 'ENABLED' : 'PAUSED'}</strong> ({recordingQuality})</span>
               </div>
+=======
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 text-slate-700">
+              <Video className="w-4 h-4 text-emerald-600" />
+              <span>Session Video Stream: <strong className={recordSession ? 'text-emerald-700' : 'text-slate-500'}>{recordSession ? 'ENABLED' : 'DISABLED'}</strong> ({recordingQuality})</span>
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
             </div>
             <button onClick={onViewRecording} className="text-emerald-700 font-bold hover:underline cursor-pointer">
               Launch Session Player →

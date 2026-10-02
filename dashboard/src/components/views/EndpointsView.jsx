@@ -1,11 +1,19 @@
 import React, { useState } from 'react';
+<<<<<<< HEAD
 import { Monitor, Radio, Power, LayoutDashboard, Plus, ChevronRight, ShieldCheck, UserCheck, AlertCircle, Download, UserX } from 'lucide-react';
+=======
+import { Monitor, Radio, Power, LayoutDashboard, Plus, ChevronRight, ShieldCheck, UserCheck, AlertCircle, Download } from 'lucide-react';
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
 
 export default function EndpointsView({ 
   endpoints = [], 
   onSelectEndpoint, 
   onOpenAddModal, 
+<<<<<<< HEAD
   onKickEndpoint,
+=======
+  onOpenConsentModal,
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
   logs = []
 }) {
   const [statusFilter, setStatusFilter] = useState('All');
@@ -24,7 +32,11 @@ export default function EndpointsView({
   // Dynamic fleet metrics
   const totalCount = endpoints.length;
   const onlineCount = endpoints.filter(e => e.status === 'Online').length;
+<<<<<<< HEAD
   const offlineCount = endpoints.filter(e => e.status === 'Offline' || e.status?.includes('Kicked')).length;
+=======
+  const offlineCount = endpoints.filter(e => e.status === 'Offline').length;
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
   const uniqueAppsCount = new Set(endpoints.map(e => e.app).filter(Boolean)).size;
 
   return (
@@ -101,6 +113,18 @@ export default function EndpointsView({
               <span>Download Agent (.zip)</span>
             </a>
 
+<<<<<<< HEAD
+=======
+            {/* Run Consent UI Button */}
+            <button
+              onClick={onOpenConsentModal}
+              className="flex items-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-4 py-2 rounded-lg text-xs font-bold transition shadow-sm cursor-pointer"
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <span>Run Agent Consent UI</span>
+            </button>
+
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
             {/* Add Endpoint Button */}
             <button
               onClick={onOpenAddModal}
@@ -119,6 +143,7 @@ export default function EndpointsView({
               <UserCheck className="w-7 h-7" />
             </div>
             <div>
+<<<<<<< HEAD
               <h4 className="text-base font-bold text-slate-900">No Authorized Endpoints Connected</h4>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                 By capstone privacy and security policy, endpoints do not appear in this portal until the workstation user executes the 
@@ -133,6 +158,29 @@ export default function EndpointsView({
               >
                 <Download className="w-4 h-4 text-white" />
                 <span>Download Client Agent Installers</span>
+=======
+              <h4 className="text-base font-bold text-slate-900">No Authorized Endpoints Listed</h4>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                By capstone privacy policy, endpoints do not appear in this portal unless a workstation user runs the 
+                <strong> Agent Consent UI</strong> dialog and explicitly checks <em>"I acknowledge and authorize session monitoring"</em>.
+              </p>
+            </div>
+            <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={onOpenConsentModal}
+                className="inline-flex items-center gap-2 bg-[#22c55e] hover:bg-[#16a34a] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-md shadow-emerald-500/20 cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>Simulate Agent Consent UI</span>
+              </button>
+              <a
+                href="/downloads/EDMT_Agent_Package.zip"
+                download="EDMT_Agent_Package.zip"
+                className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-emerald-400" />
+                <span>Download Test Device Installers</span>
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
               </a>
             </div>
           </div>
@@ -167,7 +215,11 @@ export default function EndpointsView({
                       <td className="py-3.5 px-4">
                         <span className="inline-flex items-center gap-1.5 font-medium">
                           <span className={`text-[10px] ${
+<<<<<<< HEAD
                             ep.osType === 'mac' ? 'text-slate-700' : 'text-blue-600'
+=======
+                            ep.osType === 'win' ? 'text-blue-600' : 'text-slate-700'
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
                           }`}>■</span>
                           {ep.os}
                         </span>
@@ -200,6 +252,7 @@ export default function EndpointsView({
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-center">
+<<<<<<< HEAD
                         <div className="flex items-center justify-center gap-1.5">
                           <button
                             onClick={() => onSelectEndpoint(ep)}
@@ -220,6 +273,14 @@ export default function EndpointsView({
                             <span>Kick</span>
                           </button>
                         </div>
+=======
+                        <button
+                          onClick={() => onSelectEndpoint(ep)}
+                          className="px-3 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-semibold text-xs transition cursor-pointer border border-emerald-200"
+                        >
+                          View
+                        </button>
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
                       </td>
                     </tr>
                   ))}

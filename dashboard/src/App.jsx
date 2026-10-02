@@ -5,6 +5,10 @@ import Header from './components/Header';
 import ScreenshotModal from './components/ScreenshotModal';
 import AddEndpointModal from './components/AddEndpointModal';
 import SessionPlayerModal from './components/SessionPlayerModal';
+<<<<<<< HEAD
+=======
+import ConsentModal from './components/ConsentModal';
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
 
 import FleetOverviewView from './components/views/FleetOverviewView';
 import EndpointsView from './components/views/EndpointsView';
@@ -13,6 +17,7 @@ import ActivityView from './components/views/ActivityView';
 import ReportsView from './components/views/ReportsView';
 import SettingsView from './components/views/SettingsView';
 
+<<<<<<< HEAD
 import { 
   getAuditLogs, 
   getConsentedEndpoints, 
@@ -21,6 +26,9 @@ import {
   kickEndpointApi,
   INITIAL_LOGS 
 } from './services/api';
+=======
+import { getAuditLogs, getConsentedEndpoints, saveConsentedEndpoints, INITIAL_LOGS } from './services/api';
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
 
 export default function App() {
   // Authentication State (Persisted in localStorage)
@@ -49,6 +57,7 @@ export default function App() {
   const [activeCapture, setActiveCapture] = useState(null);
   const [isAddEndpointOpen, setIsAddEndpointOpen] = useState(false);
   const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
+<<<<<<< HEAD
 
   // Polling loop: fetch telemetry logs every 5 seconds when authenticated
   useEffect(() => {
@@ -68,11 +77,22 @@ export default function App() {
       setSelectedEndpoint(endpoints[0]);
     }
   }, [endpoints]);
+=======
+  const [isConsentModalOpen, setIsConsentModalOpen] = useState(false);
+
+  // Fetch telemetry logs on mount
+  useEffect(() => {
+    if (auth) {
+      loadTelemetryLogs();
+    }
+  }, [auth]);
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
 
   const loadTelemetryLogs = async () => {
     setIsRefreshing(true);
     try {
       const data = await getAuditLogs(100);
+<<<<<<< HEAD
       const kicked = getKickedEndpointIds();
 
       if (Array.isArray(data) && data.length > 0) {
@@ -138,6 +158,29 @@ export default function App() {
           const merged = Array.from(currentMap.values());
           saveConsentedEndpoints(merged);
           return merged;
+=======
+      if (Array.isArray(data) && data.length > 0) {
+        setLogs(data);
+
+        // Update latest endpoint app and metrics from logs
+        setEndpoints((prevEndpoints) => {
+          return prevEndpoints.map((ep) => {
+            const matchingLog = data.find(
+              (l) => l.endpoint_id === ep.endpoint_id || String(l.endpoint_id) === String(ep.endpoint_id)
+            );
+            if (matchingLog) {
+              return {
+                ...ep,
+                cpu: matchingLog.cpu_percent !== undefined ? matchingLog.cpu_percent : ep.cpu,
+                ram: matchingLog.ram_percent !== undefined ? matchingLog.ram_percent : ep.ram,
+                app: matchingLog.active_app || ep.app,
+                category: matchingLog.app_category || ep.category,
+                lastSeen: 'Just now'
+              };
+            }
+            return ep;
+          });
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
         });
       }
     } catch (err) {
@@ -165,6 +208,7 @@ export default function App() {
     }
   };
 
+<<<<<<< HEAD
   const handleKickEndpoint = async (endpointId) => {
     await kickEndpointApi(endpointId);
     setEndpoints((prev) => {
@@ -176,6 +220,18 @@ export default function App() {
       setSelectedEndpoint(null);
       setActiveTab('endpoints');
     }
+=======
+  const handleAcceptConsent = (newEndpoint) => {
+    setEndpoints((prev) => {
+      const filtered = prev.filter(
+        ep => ep.name !== newEndpoint.name && String(ep.endpoint_id) !== String(newEndpoint.endpoint_id)
+      );
+      const updated = [newEndpoint, ...filtered];
+      saveConsentedEndpoints(updated);
+      return updated;
+    });
+    setSelectedEndpoint(newEndpoint);
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
   };
 
   const handleAddEndpoint = (newEp) => {
@@ -212,7 +268,11 @@ export default function App() {
         activeTab={activeTab}
         onTabChange={(tab) => {
           setActiveTab(tab);
+<<<<<<< HEAD
           if (tab === 'endpoints' && endpoints.length > 0 && !selectedEndpoint) {
+=======
+          if (tab === 'endpoints' && endpoints.length > 0) {
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
             setSelectedEndpoint(endpoints[0]);
           }
         }}
@@ -241,6 +301,10 @@ export default function App() {
               onRefresh={loadTelemetryLogs}
               isRefreshing={isRefreshing}
               onViewScreenshot={setActiveCapture}
+<<<<<<< HEAD
+=======
+              onOpenConsentModal={() => setIsConsentModalOpen(true)}
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
             />
           )}
 
@@ -249,7 +313,11 @@ export default function App() {
               endpoints={endpoints}
               onSelectEndpoint={handleSelectEndpoint}
               onOpenAddModal={() => setIsAddEndpointOpen(true)}
+<<<<<<< HEAD
               onKickEndpoint={handleKickEndpoint}
+=======
+              onOpenConsentModal={() => setIsConsentModalOpen(true)}
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
               logs={logs}
             />
           )}
@@ -261,7 +329,10 @@ export default function App() {
               logs={logs}
               onViewScreenshot={setActiveCapture}
               onViewRecording={() => setIsRecordingModalOpen(true)}
+<<<<<<< HEAD
               onKickEndpoint={handleKickEndpoint}
+=======
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
             />
           )}
 
@@ -308,6 +379,16 @@ export default function App() {
         onClose={() => setIsRecordingModalOpen(false)}
         endpointName={selectedEndpoint?.name || 'WORKSTATION-WIN11'}
       />
+<<<<<<< HEAD
+=======
+
+      {/* 4. Native Agent Consent UI Modal */}
+      <ConsentModal
+        isOpen={isConsentModalOpen}
+        onClose={() => setIsConsentModalOpen(false)}
+        onAcceptConsent={handleAcceptConsent}
+      />
+>>>>>>> 04a5980c279b2fcaf64da1b4312dd34f2ce4d4cb
     </div>
   );
 }
