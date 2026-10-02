@@ -9,6 +9,8 @@ class TelemetryAPIClient:
             res = requests.post(self.server_url, json=payload, timeout=5)
             if res.status_code == 200:
                 return res.json()
+            elif res.status_code in (401, 403):
+                return {"status": "kicked"}
         except requests.exceptions.RequestException as e:
             print(f"Transport error: {e}")
         return None

@@ -14,6 +14,9 @@ class TelemetryPayload(BaseModel):
     capture_requested: bool = False
     file_hash: Optional[str] = None
     encryption_iv: Optional[str] = None
+    hostname: Optional[str] = None
+    os_type: Optional[str] = None
+    user: Optional[str] = None
 
 class PresignedURLResponse(BaseModel):
     status: str
