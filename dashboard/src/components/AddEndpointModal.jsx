@@ -15,7 +15,7 @@ export default function AddEndpointModal({ isOpen, onClose, onAddEndpoint }) {
 
     let iconType = 'win';
     if (osType.toLowerCase().includes('mac')) iconType = 'mac';
-    if (osType.toLowerCase().includes('linux') || osType.toLowerCase().includes('ubuntu')) iconType = 'linux';
+    if (osType.toLowerCase().includes('linux')) iconType = 'linux';
 
     const newEndpoint = {
       endpoint_id: Date.now(),
@@ -107,7 +107,7 @@ export default function AddEndpointModal({ isOpen, onClose, onAddEndpoint }) {
                 <option value="Windows 11 Pro">Windows 11 Pro</option>
                 <option value="Windows 10 Enterprise">Windows 10 Enterprise</option>
                 <option value="macOS 14.5 Sonoma">macOS 14.5 Sonoma</option>
-                <option value="Ubuntu 24.04 LTS">Ubuntu 24.04 LTS</option>
+                <option value="Red Hat Enterprise Linux 9">Red Hat Enterprise Linux 9</option>
               </select>
             </div>
           </div>

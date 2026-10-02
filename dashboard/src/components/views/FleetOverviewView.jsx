@@ -13,7 +13,8 @@ export default function FleetOverviewView({
   onNavigate, 
   onRefresh, 
   isRefreshing, 
-  onViewScreenshot 
+  onViewScreenshot,
+  onOpenConsentModal 
 }) {
   const totalCount = endpoints.length;
   const onlineCount = endpoints.filter(e => e.status === 'Online').length;
@@ -28,16 +29,25 @@ export default function FleetOverviewView({
         <div>
           <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold mb-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>AWS Telemetry Fleet Online</span>
+            <span>AWS Telemetry Fleet {totalCount > 0 ? 'Online' : 'Standby'}</span>
           </div>
-          <h2 className="text-2xl font-black tracking-tight">Endpoint Privacy & Compliance Control</h2>
+          <h2 className="text-2xl font-black tracking-tight">Endpoint Privacy &amp; Compliance Control</h2>
           <p className="text-xs text-slate-300 mt-1 max-w-xl">
-            Live observability active across {totalCount} monitored workstations.
-            All client screen captures and process events are sanitized via local DLP engines prior to AWS S3 ingestion.
+            {totalCount > 0
+              ? `Live observability active across ${totalCount} monitored workstations. All client screen captures and events are sanitized via local DLP prior to AWS S3 ingestion.`
+              : 'By policy, endpoints only appear once explicit user consent is granted via the Agent Consent UI dialog. Click "Run Consent UI" to simulate or authorize a workstation.'
+            }
           </p>
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={onOpenConsentModal}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-bold transition cursor-pointer"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Run Consent UI</span>
+          </button>
           <button
             onClick={onRefresh}
             disabled={isRefreshing}
@@ -123,65 +133,88 @@ export default function FleetOverviewView({
         <div className="p-5 border-b border-slate-200 flex items-center justify-between">
           <div>
             <h4 className="font-bold text-sm text-slate-900">Active Workstation Fleet Preview</h4>
-            <p className="text-xs text-slate-500">Instant access to registered devices</p>
+            <p className="text-xs text-slate-500">Only endpoints with explicit consent granted are listed</p>
           </div>
-          <button
-            onClick={() => onNavigate('endpoints')}
-            className="text-xs font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer"
-          >
-            View All {totalCount} Endpoints →
-          </button>
+          {totalCount > 0 && (
+            <button
+              onClick={() => onNavigate('endpoints')}
+              className="text-xs font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer"
+            >
+              View All {totalCount} Endpoints →
+            </button>
+          )}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
-            <thead>
-              <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
-                <th className="py-3 px-4">Computer Name</th>
-                <th className="py-3 px-4">User</th>
-                <th className="py-3 px-4">OS</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">CPU %</th>
-                <th className="py-3 px-4">RAM %</th>
-                <th className="py-3 px-4">Active App</th>
-                <th className="py-3 px-4 text-center">Inspect</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
-              {endpoints.slice(0, 5).map((ep) => (
-                <tr key={ep.endpoint_id} className="hover:bg-slate-50/70">
-                  <td className="py-3 px-4 font-bold text-slate-900 flex items-center gap-2">
-                    <Monitor className="w-4 h-4 text-slate-500" />
-                    <span>{ep.name}</span>
-                  </td>
-                  <td className="py-3 px-4">{ep.user}</td>
-                  <td className="py-3 px-4">{ep.os}</td>
-                  <td className="py-3 px-4">
-                    <span className={`inline-flex items-center gap-1.5 font-semibold text-xs ${
-                      ep.status === 'Online' ? 'text-emerald-700' : 'text-slate-500'
-                    }`}>
-                      <span className={`w-2 h-2 rounded-full ${ep.status === 'Online' ? 'bg-[#22c55e]' : 'bg-slate-400'}`} />
-                      {ep.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 font-mono">{ep.cpu}%</td>
-                  <td className="py-3 px-4 font-mono">{ep.ram}%</td>
-                  <td className="py-3 px-4 font-semibold text-slate-900 truncate max-w-[160px]">
-                    {ep.app || 'Idle'}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <button
-                      onClick={() => onSelectEndpoint(ep)}
-                      className="px-3 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-semibold text-xs transition cursor-pointer border border-emerald-200"
-                    >
-                      View
-                    </button>
-                  </td>
+        {endpoints.length === 0 ? (
+          <div className="py-12 px-6 text-center max-w-md mx-auto space-y-3">
+            <div className="w-12 h-12 bg-emerald-50 border border-emerald-200 text-emerald-600 rounded-xl flex items-center justify-center mx-auto shadow-sm">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <h5 className="text-sm font-bold text-slate-900">No Authorized Endpoints Available</h5>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Workstations will not appear on this dashboard unless user consent is authorized through the Agent Consent UI dialog.
+            </p>
+            <div className="pt-2">
+              <button
+                onClick={onOpenConsentModal}
+                className="inline-flex items-center gap-2 bg-[#22c55e] hover:bg-[#16a34a] text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>Run Agent Consent UI</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                  <th className="py-3 px-4">Computer Name</th>
+                  <th className="py-3 px-4">User</th>
+                  <th className="py-3 px-4">OS</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">CPU %</th>
+                  <th className="py-3 px-4">RAM %</th>
+                  <th className="py-3 px-4">Active App</th>
+                  <th className="py-3 px-4 text-center">Inspect</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {endpoints.slice(0, 5).map((ep) => (
+                  <tr key={ep.endpoint_id} className="hover:bg-slate-50/70">
+                    <td className="py-3 px-4 font-bold text-slate-900 flex items-center gap-2">
+                      <Monitor className="w-4 h-4 text-slate-500" />
+                      <span>{ep.name}</span>
+                    </td>
+                    <td className="py-3 px-4">{ep.user}</td>
+                    <td className="py-3 px-4">{ep.os}</td>
+                    <td className="py-3 px-4">
+                      <span className={`inline-flex items-center gap-1.5 font-semibold text-xs ${
+                        ep.status === 'Online' ? 'text-emerald-700' : 'text-slate-500'
+                      }`}>
+                        <span className={`w-2 h-2 rounded-full ${ep.status === 'Online' ? 'bg-[#22c55e]' : 'bg-slate-400'}`} />
+                        {ep.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-mono">{ep.cpu}%</td>
+                    <td className="py-3 px-4 font-mono">{ep.ram}%</td>
+                    <td className="py-3 px-4 font-semibold text-slate-900 truncate max-w-[160px]">
+                      {ep.app || 'Idle'}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => onSelectEndpoint(ep)}
+                        className="px-3 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-semibold text-xs transition cursor-pointer border border-emerald-200"
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

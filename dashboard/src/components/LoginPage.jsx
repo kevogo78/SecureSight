@@ -37,11 +37,6 @@ export default function LoginPage({ onLogin }) {
     }, 600);
   };
 
-  const fillDemoCredentials = () => {
-    setUsername('administrator');
-    setPassword('GGC123ggc123');
-    setError('');
-  };
 
   return (
     <div className="min-h-screen bg-[#07130c] flex flex-col justify-center items-center p-4 relative overflow-hidden font-sans">
@@ -140,16 +135,9 @@ export default function LoginPage({ onLogin }) {
           </button>
         </form>
 
-        {/* Quick Demo Credentials Autofill Helper */}
+        {/* Security Notice */}
         <div className="mt-6 pt-5 border-t border-slate-800 text-center">
-          <button
-            type="button"
-            onClick={fillDemoCredentials}
-            className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition underline underline-offset-4 decoration-emerald-500/40"
-          >
-            Auto-fill Administrator Credentials
-          </button>
-          <p className="text-[11px] text-slate-500 mt-2">
+          <p className="text-[11px] text-slate-500">
             Protected endpoint gateway • Role-Based Access Control enforced
           </p>
         </div>

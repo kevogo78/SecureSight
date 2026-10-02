@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { 
   Settings, Key, Shield, Sliders, RefreshCw, Copy, Check, 
-  Plus, Trash2, Globe, Wifi, CheckCircle2, AlertCircle, Save
+  Plus, Trash2, Globe, Wifi, CheckCircle2, AlertCircle, Save,
+  FileText, Video, Lock, AlertTriangle
 } from 'lucide-react';
 import { checkBackendHealth } from '../../services/api';
 
@@ -11,6 +12,29 @@ export default function SettingsView() {
   const [cryptoKey, setCryptoKey] = useState('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // New Toggles: Capture keys to text file & Record session
+  const [captureKeysToFile, setCaptureKeysToFile] = useState(() => {
+    try {
+      const stored = localStorage.getItem('edmt_capture_keys_to_file');
+      return stored === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [keylogFilePath, setKeylogFilePath] = useState('agent/keystrokes_audit.txt');
+
+  const [recordSession, setRecordSession] = useState(() => {
+    try {
+      const stored = localStorage.getItem('edmt_record_session');
+      return stored !== 'false'; // default true
+    } catch {
+      return true;
+    }
+  });
+
+  const [recordingQuality, setRecordingQuality] = useState('720p @ 1 FPS (Free Tier Safe)');
 
   // Blacklist state matching agent/config/blacklist.json
   const [blacklistedProcesses, setBlacklistedProcesses] = useState([
@@ -80,6 +104,14 @@ export default function SettingsView() {
   };
 
   const handleSaveSettings = () => {
+    try {
+      localStorage.setItem('edmt_capture_keys_to_file', String(captureKeysToFile));
+      localStorage.setItem('edmt_record_session', String(recordSession));
+      localStorage.setItem('edmt_keylog_path', keylogFilePath);
+      localStorage.setItem('edmt_recording_quality', recordingQuality);
+    } catch (e) {
+      console.warn('Failed to save settings:', e);
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -89,9 +121,9 @@ export default function SettingsView() {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-200 pb-5">
         <div>
-          <h3 className="text-xl font-bold tracking-tight text-slate-900">System & Privacy Configuration</h3>
+          <h3 className="text-xl font-bold tracking-tight text-slate-900">System &amp; Privacy Configuration</h3>
           <p className="text-xs text-slate-500">
-            Manage endpoint polling intervals, cryptographic credentials, and active DLP inspection rules.
+            Manage endpoint polling intervals, keystroke capture options, session video recordings, and active DLP inspection rules.
           </p>
         </div>
 
@@ -102,6 +134,106 @@ export default function SettingsView() {
           {saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
           <span>{saved ? 'Changes Saved' : 'Save Fleet Configuration'}</span>
         </button>
+      </div>
+
+      {/* NEW SECTION: Keystroke File Capture & Session Recording Toggles */}
+      <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm space-y-5">
+        <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+          <FileText className="w-5 h-5 text-emerald-600" />
+          <div>
+            <h4 className="text-sm font-bold text-slate-900">Keystroke Capture &amp; Session Screen Recording Controls</h4>
+            <p className="text-xs text-slate-500">Toggle whether client workstations write keystrokes to text files or stream session recordings.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Toggle 1: Capture keys to a text file */}
+          <div className={`p-4 rounded-xl border transition ${
+            captureKeysToFile ? 'border-amber-300 bg-amber-50/50' : 'border-slate-200 bg-slate-50/50'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <label className="flex items-center gap-2.5 cursor-pointer font-bold text-xs text-slate-900">
+                <input
+                  type="checkbox"
+                  checked={captureKeysToFile}
+                  onChange={(e) => setCaptureKeysToFile(e.target.checked)}
+                  className="w-4 h-4 accent-amber-600 rounded cursor-pointer"
+                />
+                <span>Capture Keys to a Text File</span>
+              </label>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                captureKeysToFile ? 'bg-amber-200 text-amber-900' : 'bg-slate-200 text-slate-600'
+              }`}>
+                {captureKeysToFile ? 'ENABLED' : 'DISABLED'}
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-relaxed mb-3">
+              When enabled, keystrokes are recorded directly to a local text file on the endpoint machine before privacy filtration.
+            </p>
+
+            {captureKeysToFile && (
+              <div className="space-y-1.5 pt-2 border-t border-amber-200/60">
+                <label className="block text-[11px] font-semibold text-slate-700">Target Output Text File Path:</label>
+                <input
+                  type="text"
+                  value={keylogFilePath}
+                  onChange={(e) => setKeylogFilePath(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded text-xs font-mono text-slate-800"
+                />
+                <p className="text-[10px] text-amber-700 font-semibold flex items-center gap-1 mt-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  Warning: Text file contains unmasked keypress data for diagnostic auditing.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Toggle 2: Record the session */}
+          <div className={`p-4 rounded-xl border transition ${
+            recordSession ? 'border-emerald-300 bg-emerald-50/50' : 'border-slate-200 bg-slate-50/50'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <label className="flex items-center gap-2.5 cursor-pointer font-bold text-xs text-slate-900">
+                <input
+                  type="checkbox"
+                  checked={recordSession}
+                  onChange={(e) => setRecordSession(e.target.checked)}
+                  className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
+                />
+                <span>Record the Session</span>
+              </label>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                recordSession ? 'bg-emerald-200 text-emerald-900' : 'bg-slate-200 text-slate-600'
+              }`}>
+                {recordSession ? 'ENABLED' : 'DISABLED'}
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-relaxed mb-3">
+              When enabled, the client agent captures periodic display buffers and streams encrypted session chunks to Amazon S3.
+            </p>
+
+            {recordSession && (
+              <div className="space-y-1.5 pt-2 border-t border-emerald-200/60">
+                <label className="block text-[11px] font-semibold text-slate-700">Stream Quality / Format:</label>
+                <select
+                  value={recordingQuality}
+                  onChange={(e) => setRecordingQuality(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-800"
+                >
+                  <option value="720p @ 1 FPS (Free Tier Safe)">720p @ 1 FPS (Free Tier Safe)</option>
+                  <option value="1080p @ 2 FPS (High Definition)">1080p @ 2 FPS (High Definition)</option>
+                  <option value="Thumbnail Chunks (Low Bandwidth)">Thumbnail Chunks (Low Bandwidth)</option>
+                </select>
+                <p className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1 mt-1">
+                  <Lock className="w-3 h-3" />
+                  AES-256-GCM hardware encryption active on all video streams.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Grid of Settings */}
@@ -167,7 +299,7 @@ export default function SettingsView() {
                 type="button"
                 onClick={handleCopyKey}
                 title="Copy Key"
-                className="p-2.5 border border-slate-200 hover:bg-slate-50 rounded-lg text-slate-600 transition"
+                className="p-2.5 border border-slate-200 hover:bg-slate-50 rounded-lg text-slate-600 transition cursor-pointer"
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
               </button>
@@ -181,7 +313,7 @@ export default function SettingsView() {
             <button
               type="button"
               onClick={generateNewKey}
-              className="flex items-center gap-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 rounded-lg transition"
+              className="flex items-center gap-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 rounded-lg transition cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Regenerate Random 256-bit Key</span>
@@ -216,7 +348,7 @@ export default function SettingsView() {
               />
               <button
                 type="submit"
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1"
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" /> Add
               </button>
@@ -229,7 +361,7 @@ export default function SettingsView() {
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-700 rounded-md text-xs font-mono border border-slate-200"
                 >
                   {proc}
-                  <button onClick={() => removeProcess(proc)} className="text-slate-400 hover:text-red-500">
+                  <button onClick={() => removeProcess(proc)} className="text-slate-400 hover:text-red-500 cursor-pointer">
                     <Trash2 className="w-3 h-3" />
                   </button>
                 </span>
@@ -250,7 +382,7 @@ export default function SettingsView() {
               />
               <button
                 type="submit"
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1"
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" /> Add
               </button>
@@ -263,7 +395,7 @@ export default function SettingsView() {
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-800 rounded-md text-xs font-semibold border border-amber-200"
                 >
                   {t}
-                  <button onClick={() => removeTitle(t)} className="text-amber-500 hover:text-red-500">
+                  <button onClick={() => removeTitle(t)} className="text-amber-500 hover:text-red-500 cursor-pointer">
                     <Trash2 className="w-3 h-3" />
                   </button>
                 </span>
@@ -275,7 +407,7 @@ export default function SettingsView() {
         {/* DLP Rule Toggles */}
         <div className="pt-4 border-t border-slate-100 space-y-3">
           <h5 className="text-xs font-bold text-slate-700">Real-time DLP Pattern Redaction</h5>
-          <div className="grid grid-cols-3 gap-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
             <label className="flex items-center gap-2 cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-200">
               <input
                 type="checkbox"
@@ -303,7 +435,7 @@ export default function SettingsView() {
                 onChange={(e) => setMaskPasswords(e.target.checked)}
                 className="accent-emerald-600 w-4 h-4 rounded cursor-pointer"
               />
-              <span className="font-semibold text-slate-800">Credentials & API Keys</span>
+              <span className="font-semibold text-slate-800">Credentials &amp; API Keys</span>
             </label>
           </div>
         </div>

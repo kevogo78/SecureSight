@@ -5,8 +5,8 @@ const api = axios.create({
   timeout: 6000
 });
 
-// Default seed endpoints corresponding to database/seed.sql and project architecture
-export const INITIAL_ENDPOINTS = [
+// Candidate endpoint templates for user consent authorization
+export const WORKSTATION_PRESETS = [
   {
     endpoint_id: 1,
     name: 'WORKSTATION-WIN11',
@@ -24,7 +24,9 @@ export const INITIAL_ENDPOINTS = [
     disk: 42,
     network: '14 Mbps',
     app: 'Code.exe',
-    category: 'Development'
+    category: 'Development',
+    consent_granted: true,
+    consent_timestamp: new Date().toISOString()
   },
   {
     endpoint_id: 2,
@@ -43,49 +45,13 @@ export const INITIAL_ENDPOINTS = [
     disk: 36,
     network: '8 Mbps',
     app: 'Terminal',
-    category: 'Development'
-  },
-  {
-    endpoint_id: 3,
-    name: 'UBUNTU-SRV-01',
-    user: 'devops',
-    os: 'Ubuntu 24.04 LTS',
-    osType: 'linux',
-    agent_ver: '1.0.0',
-    status: 'Online',
-    lastSeen: '12 minutes ago',
-    lastSeenDate: new Date(Date.now() - 12 * 60000).toISOString(),
-    ipAddress: '10.0.1.42',
-    uptime: '5 days 11 hours',
-    cpu: 8.4,
-    ram: 28.0,
-    disk: 54,
-    network: '42 Mbps',
-    app: 'dockerd',
-    category: 'Infrastructure'
-  },
-  {
-    endpoint_id: 4,
-    name: 'FINANCE-PC-102',
-    user: 'Auditor',
-    os: 'Windows 11 Pro',
-    osType: 'win',
-    agent_ver: '1.0.0',
-    status: 'Offline',
-    lastSeen: '3 hours ago',
-    lastSeenDate: new Date(Date.now() - 3 * 3600000).toISOString(),
-    ipAddress: '192.168.1.118',
-    uptime: '0 minutes',
-    cpu: 0.0,
-    ram: 0.0,
-    disk: 65,
-    network: '0 Mbps',
-    app: 'Excel.exe',
-    category: 'Productivity'
+    category: 'Development',
+    consent_granted: true,
+    consent_timestamp: new Date().toISOString()
   }
 ];
 
-// Fallback seed audit logs corresponding to database/seed.sql
+// Fallback seed audit logs (Ubuntu server removed)
 export const INITIAL_LOGS = [
   {
     log_id: 101,
@@ -158,20 +124,6 @@ export const INITIAL_LOGS = [
     media_url: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80'
   },
   {
-    log_id: 106,
-    endpoint_id: 3,
-    timestamp: new Date(Date.now() - 40 * 60000).toISOString(),
-    active_app: 'dockerd',
-    app_category: 'Infrastructure',
-    keystrokes: 18,
-    activity_state: 'Active',
-    cpu_percent: 8.4,
-    ram_percent: 28.0,
-    filter_status: 'Clean',
-    dlp_flag: false,
-    media_url: null
-  },
-  {
     log_id: 107,
     endpoint_id: 1,
     timestamp: new Date(Date.now() - 65 * 60000).toISOString(),
@@ -186,6 +138,30 @@ export const INITIAL_LOGS = [
     media_url: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=1200&q=80'
   }
 ];
+
+export const getConsentedEndpoints = () => {
+  try {
+    const raw = localStorage.getItem('edmt_consented_endpoints');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(ep => ep.consent_granted === true && !ep.name.toLowerCase().includes('ubuntu'));
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return [];
+};
+
+export const saveConsentedEndpoints = (endpoints) => {
+  try {
+    const valid = endpoints.filter(ep => ep.consent_granted === true && !ep.name.toLowerCase().includes('ubuntu'));
+    localStorage.setItem('edmt_consented_endpoints', JSON.stringify(valid));
+  } catch (e) {
+    console.warn('Failed to save consented endpoints:', e);
+  }
+};
 
 export const getAuditLogs = async (limit = 100) => {
   try {

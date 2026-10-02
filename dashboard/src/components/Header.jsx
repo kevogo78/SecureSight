@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
-import { Search, Bell, Shield, LogOut, Settings, FileText, CheckCircle2, AlertTriangle, User } from 'lucide-react';
+import { Bell, Shield, LogOut, Settings, FileText, CheckCircle2, AlertTriangle, User } from 'lucide-react';
 
 export default function Header({ 
   user, 
   onLogout, 
   onNavigate, 
-  searchQuery, 
-  setSearchQuery,
   logs = [] 
 }) {
   const [showNotifications, setShowNotifications] = useState(false);
@@ -44,7 +42,7 @@ export default function Header({
     {
       id: 3,
       title: 'Endpoint Check-in Confirmed',
-      desc: 'MACBOOK-PRO-M2 heartbeat acknowledged by FastAPI',
+      desc: 'Workstation heartbeat acknowledged by FastAPI',
       time: '14 mins ago',
       type: 'info'
     },
@@ -69,18 +67,6 @@ export default function Header({
       </div>
 
       <div className="flex items-center gap-4">
-        {/* Search Input */}
-        <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input 
-            type="text" 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search endpoints, apps, logs..." 
-            className="pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 w-64 text-slate-800 placeholder-slate-400"
-          />
-        </div>
-
         {/* Notifications Bell */}
         <div className="relative">
           <button 

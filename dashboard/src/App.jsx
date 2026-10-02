@@ -5,6 +5,7 @@ import Header from './components/Header';
 import ScreenshotModal from './components/ScreenshotModal';
 import AddEndpointModal from './components/AddEndpointModal';
 import SessionPlayerModal from './components/SessionPlayerModal';
+import ConsentModal from './components/ConsentModal';
 
 import FleetOverviewView from './components/views/FleetOverviewView';
 import EndpointsView from './components/views/EndpointsView';
@@ -13,7 +14,7 @@ import ActivityView from './components/views/ActivityView';
 import ReportsView from './components/views/ReportsView';
 import SettingsView from './components/views/SettingsView';
 
-import { getAuditLogs, INITIAL_ENDPOINTS, INITIAL_LOGS } from './services/api';
+import { getAuditLogs, getConsentedEndpoints, saveConsentedEndpoints, INITIAL_LOGS } from './services/api';
 
 export default function App() {
   // Authentication State (Persisted in localStorage)
@@ -28,11 +29,13 @@ export default function App() {
 
   // Navigation State
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [selectedEndpoint, setSelectedEndpoint] = useState(INITIAL_ENDPOINTS[0]);
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Data State
-  const [endpoints, setEndpoints] = useState(INITIAL_ENDPOINTS);
+  
+  // Data State - Enforce consent policy: Only endpoints that granted consent are loaded
+  const [endpoints, setEndpoints] = useState(() => getConsentedEndpoints());
+  const [selectedEndpoint, setSelectedEndpoint] = useState(() => {
+    const list = getConsentedEndpoints();
+    return list.length > 0 ? list[0] : null;
+  });
   const [logs, setLogs] = useState(INITIAL_LOGS);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -40,6 +43,7 @@ export default function App() {
   const [activeCapture, setActiveCapture] = useState(null);
   const [isAddEndpointOpen, setIsAddEndpointOpen] = useState(false);
   const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
+  const [isConsentModalOpen, setIsConsentModalOpen] = useState(false);
 
   // Fetch telemetry logs on mount
   useEffect(() => {
@@ -100,8 +104,33 @@ export default function App() {
     }
   };
 
+  const handleAcceptConsent = (newEndpoint) => {
+    setEndpoints((prev) => {
+      const filtered = prev.filter(
+        ep => ep.name !== newEndpoint.name && String(ep.endpoint_id) !== String(newEndpoint.endpoint_id)
+      );
+      const updated = [newEndpoint, ...filtered];
+      saveConsentedEndpoints(updated);
+      return updated;
+    });
+    setSelectedEndpoint(newEndpoint);
+  };
+
   const handleAddEndpoint = (newEp) => {
-    setEndpoints([newEp, ...endpoints]);
+    const consentedEp = {
+      ...newEp,
+      consent_granted: true,
+      consent_timestamp: new Date().toISOString()
+    };
+    setEndpoints((prev) => {
+      const filtered = prev.filter(
+        ep => ep.name !== consentedEp.name && String(ep.endpoint_id) !== String(consentedEp.endpoint_id)
+      );
+      const updated = [consentedEp, ...filtered];
+      saveConsentedEndpoints(updated);
+      return updated;
+    });
+    setSelectedEndpoint(consentedEp);
   };
 
   const handleSelectEndpoint = (ep) => {
@@ -121,7 +150,7 @@ export default function App() {
         activeTab={activeTab}
         onTabChange={(tab) => {
           setActiveTab(tab);
-          if (tab === 'endpoints') {
+          if (tab === 'endpoints' && endpoints.length > 0) {
             setSelectedEndpoint(endpoints[0]);
           }
         }}
@@ -136,8 +165,6 @@ export default function App() {
           user={auth}
           onLogout={handleLogout}
           onNavigate={setActiveTab}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
           logs={logs}
         />
 
@@ -152,6 +179,7 @@ export default function App() {
               onRefresh={loadTelemetryLogs}
               isRefreshing={isRefreshing}
               onViewScreenshot={setActiveCapture}
+              onOpenConsentModal={() => setIsConsentModalOpen(true)}
             />
           )}
 
@@ -160,14 +188,14 @@ export default function App() {
               endpoints={endpoints}
               onSelectEndpoint={handleSelectEndpoint}
               onOpenAddModal={() => setIsAddEndpointOpen(true)}
-              searchQuery={searchQuery}
+              onOpenConsentModal={() => setIsConsentModalOpen(true)}
               logs={logs}
             />
           )}
 
           {activeTab === 'endpoint-detail' && (
             <EndpointDetailView
-              endpoint={selectedEndpoint}
+              endpoint={selectedEndpoint || endpoints[0]}
               onBack={() => setActiveTab('endpoints')}
               logs={logs}
               onViewScreenshot={setActiveCapture}
@@ -217,6 +245,13 @@ export default function App() {
         isOpen={isRecordingModalOpen}
         onClose={() => setIsRecordingModalOpen(false)}
         endpointName={selectedEndpoint?.name || 'WORKSTATION-WIN11'}
+      />
+
+      {/* 4. Native Agent Consent UI Modal */}
+      <ConsentModal
+        isOpen={isConsentModalOpen}
+        onClose={() => setIsConsentModalOpen(false)}
+        onAcceptConsent={handleAcceptConsent}
       />
     </div>
   );
