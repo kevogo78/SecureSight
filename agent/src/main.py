@@ -48,9 +48,10 @@ class AgentOrchestrator:
         metrics = self.tracker.get_system_metrics()
         kpm = self.tracker.get_and_reset_activity()
 
-        # Mock current process (In production, replace with win32gui query)
-        active_proc = "Code.exe"
-        active_title = "Visual Studio Code - Agent Workspace"
+        # Dynamically query active process and window title from activity tracker
+        window_info = self.tracker.get_active_window()
+        active_proc = window_info.get("app_name") or "Code.exe"
+        active_title = window_info.get("window_title_sanitized") or window_info.get("window_title_raw") or "Active Window"
 
         is_sensitive, status_msg = self.privacy.evaluate_environment(active_proc, active_title)
         
@@ -91,7 +92,7 @@ class AgentOrchestrator:
         self.tracker.stop()
         self.app.quit()
 
-if __name__ == "__main__":
+def main():
     qt_app = QApplication(sys.argv)
     qt_app.setQuitOnLastWindowClosed(False)
 
@@ -102,3 +103,6 @@ if __name__ == "__main__":
         sys.exit(qt_app.exec())
     else:
         sys.exit(0)
+
+if __name__ == "__main__":
+    main()

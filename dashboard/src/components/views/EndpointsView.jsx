@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Monitor, Radio, Power, LayoutDashboard, Plus, ChevronRight, ShieldCheck, UserCheck, AlertCircle } from 'lucide-react';
+import { Monitor, Radio, Power, LayoutDashboard, Plus, ChevronRight, ShieldCheck, UserCheck, AlertCircle, Download } from 'lucide-react';
 
 export default function EndpointsView({ 
   endpoints = [], 
@@ -91,6 +91,16 @@ export default function EndpointsView({
               <option value="Offline">Offline ({offlineCount})</option>
             </select>
 
+            {/* Download Agent Package */}
+            <a
+              href="/downloads/EDMT_Agent_Package.zip"
+              download="EDMT_Agent_Package.zip"
+              className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2 rounded-lg text-xs font-bold transition shadow-sm cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Download Agent (.zip)</span>
+            </a>
+
             {/* Run Consent UI Button */}
             <button
               onClick={onOpenConsentModal}
@@ -124,14 +134,22 @@ export default function EndpointsView({
                 <strong> Agent Consent UI</strong> dialog and explicitly checks <em>"I acknowledge and authorize session monitoring"</em>.
               </p>
             </div>
-            <div className="pt-2">
+            <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
               <button
                 onClick={onOpenConsentModal}
                 className="inline-flex items-center gap-2 bg-[#22c55e] hover:bg-[#16a34a] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-md shadow-emerald-500/20 cursor-pointer"
               >
                 <ShieldCheck className="w-4 h-4" />
-                <span>Launch Agent Consent UI Now</span>
+                <span>Simulate Agent Consent UI</span>
               </button>
+              <a
+                href="/downloads/EDMT_Agent_Package.zip"
+                download="EDMT_Agent_Package.zip"
+                className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-emerald-400" />
+                <span>Download Test Device Installers</span>
+              </a>
             </div>
           </div>
         ) : (

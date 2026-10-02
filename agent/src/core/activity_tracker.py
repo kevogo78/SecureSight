@@ -95,6 +95,22 @@ class ActivityTracker:
                         app_name = proc.name()
             except Exception:
                 pass
+        elif platform.system() == "Darwin":
+            try:
+                import subprocess
+                cmd_app = "osascript -e 'tell application \"System Events\" to get name of first application process whose frontmost is true'"
+                app_res = subprocess.check_output(cmd_app, shell=True, text=True, timeout=1).strip()
+                if app_res:
+                    app_name = app_res
+                cmd_title = "osascript -e 'tell application \"System Events\" to tell (first application process whose frontmost is true) to get name of front window'"
+                try:
+                    title_res = subprocess.check_output(cmd_title, shell=True, text=True, timeout=1).strip()
+                    raw_title = f"{app_res} - {title_res}" if title_res else app_res
+                except Exception:
+                    raw_title = app_res or "macOS Active Application"
+            except Exception:
+                raw_title = "macOS Active Application"
+                app_name = "System Process"
         else:
             raw_title = "Active Application (Platform Fallback)"
             app_name = "System Process"
