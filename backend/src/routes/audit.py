@@ -1,7 +1,10 @@
+import logging
 from fastapi import APIRouter, HTTPException
 from typing import List
 from ..database import get_db_connection
 from ..utils.s3_helper import generate_download_url
+
+logger = logging.getLogger("audit")
 
 router = APIRouter(prefix="/api/v1/audit", tags=["Audit"])
 
@@ -45,10 +48,13 @@ def fetch_recent_logs(limit: int = 50):
                         "hostname": r[12],
                         "os_type": r[13]
                     })
-                return results
+                if len(results) > 0:
+                    return results
     except Exception as e:
-        # Fallback to in-memory logs if DB connection fails
-        pass
+        logger.error(f"[!] Database fetch_recent_logs error: {e}", exc_info=True)
 
-    # If DB not available or empty, return recent in-memory logs
-    return sorted(IN_MEMORY_AUDIT_LOGS, key=lambda x: x["timestamp"], reverse=True)[:limit]
+    # If DB has no logs or connection failed, return recent in-memory logs
+    if len(IN_MEMORY_AUDIT_LOGS) > 0:
+        return sorted(IN_MEMORY_AUDIT_LOGS, key=lambda x: x["timestamp"], reverse=True)[:limit]
+
+    return results

@@ -15,6 +15,7 @@ import SettingsView from './components/views/SettingsView';
 
 import { 
   getAuditLogs, 
+  fetchEndpoints,
   getConsentedEndpoints, 
   saveConsentedEndpoints, 
   getKickedEndpointIds,
@@ -50,7 +51,7 @@ export default function App() {
   const [isAddEndpointOpen, setIsAddEndpointOpen] = useState(false);
   const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
 
-  // Polling loop: fetch telemetry logs every 5 seconds when authenticated
+  // Polling loop: fetch endpoints and telemetry logs every 5 seconds when authenticated
   useEffect(() => {
     if (!auth) return;
 
@@ -72,31 +73,58 @@ export default function App() {
   const loadTelemetryLogs = async () => {
     setIsRefreshing(true);
     try {
-      const data = await getAuditLogs(100);
       const kicked = getKickedEndpointIds();
+      const [endpointsData, logsData] = await Promise.all([
+        fetchEndpoints(),
+        getAuditLogs(100)
+      ]);
 
-      if (Array.isArray(data) && data.length > 0) {
-        setLogs(data);
+      if (Array.isArray(logsData)) {
+        setLogs(logsData);
+      }
 
-        // Auto-discover and register active endpoints dynamically from telemetry logs
-        setEndpoints((prevEndpoints) => {
-          const currentMap = new Map();
-          
-          // Retain existing unkicked endpoints
-          prevEndpoints.forEach(ep => {
-            if (!kicked.includes(String(ep.endpoint_id))) {
-              currentMap.set(String(ep.endpoint_id), { ...ep });
+      setEndpoints((prevEndpoints) => {
+        const currentMap = new Map();
+
+        // 1. Preserve existing endpoints in local state that are not kicked
+        prevEndpoints.forEach(ep => {
+          const epId = String(ep.endpoint_id);
+          if (!kicked.includes(epId)) {
+            currentMap.set(epId, { ...ep });
+          }
+        });
+
+        // 2. Ingest endpoints from the dedicated backend /endpoints API (consent-registered machines)
+        if (Array.isArray(endpointsData)) {
+          endpointsData.forEach(ep => {
+            const epId = String(ep.endpoint_id);
+            if (kicked.includes(epId)) return;
+            const existing = currentMap.get(epId);
+            if (existing) {
+              currentMap.set(epId, {
+                ...existing,
+                ...ep,
+                consent_granted: true,
+                status: ep.status || existing.status || 'Online'
+              });
+            } else {
+              currentMap.set(epId, {
+                ...ep,
+                consent_granted: true,
+                status: ep.status || 'Online'
+              });
             }
           });
+        }
 
-          // Ingest all endpoints reporting in the telemetry audit logs
-          data.forEach(log => {
+        // 3. Auto-discover and enrich active endpoints dynamically from telemetry audit logs
+        if (Array.isArray(logsData)) {
+          logsData.forEach(log => {
             const epId = String(log.endpoint_id);
             if (kicked.includes(epId)) return;
 
             const existing = currentMap.get(epId);
             if (existing) {
-              // Update existing endpoint metrics
               currentMap.set(epId, {
                 ...existing,
                 cpu: log.cpu_percent !== undefined ? log.cpu_percent : existing.cpu,
@@ -108,12 +136,11 @@ export default function App() {
                 status: 'Online'
               });
             } else {
-              // Dynamically register newly reporting test endpoint
               const isMac = (log.os_type || '').toLowerCase().includes('mac');
               const newEp = {
                 endpoint_id: log.endpoint_id,
                 name: log.hostname || (log.endpoint_id === 2 ? 'MACBOOK-PRO-M2' : `WORKSTATION-EP${log.endpoint_id}`),
-                user: log.user || 'Kevin',
+                user: log.user || 'Authorized User',
                 os: log.os_type || (isMac ? 'macOS 14.5 Sonoma' : 'Windows 11 Enterprise'),
                 osType: isMac ? 'mac' : 'win',
                 agent_ver: '1.0.0',
@@ -134,14 +161,14 @@ export default function App() {
               currentMap.set(epId, newEp);
             }
           });
+        }
 
-          const merged = Array.from(currentMap.values());
-          saveConsentedEndpoints(merged);
-          return merged;
-        });
-      }
+        const merged = Array.from(currentMap.values());
+        saveConsentedEndpoints(merged);
+        return merged;
+      });
     } catch (err) {
-      console.warn('Using baseline telemetry cache:', err);
+      console.warn('Fleet data refresh notice:', err);
     } finally {
       setIsRefreshing(false);
     }

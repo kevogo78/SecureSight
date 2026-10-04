@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS endpoints (
     endpoint_id SERIAL PRIMARY KEY,
-    user_id INT REFERENCES users(user_id) ON DELETE CASCADE,
+    user_id INT REFERENCES users(user_id) ON DELETE SET NULL,
     hostname VARCHAR(100) NOT NULL,
     os_type VARCHAR(50) NOT NULL,
     agent_ver VARCHAR(20) NOT NULL,

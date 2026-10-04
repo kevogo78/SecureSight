@@ -1,4 +1,5 @@
 import datetime
+import logging
 from fastapi import APIRouter, HTTPException
 from ..models.schemas import TelemetryPayload, PresignedURLResponse
 from ..database import get_db_connection
@@ -6,6 +7,8 @@ from ..utils.s3_helper import generate_upload_url
 from ..config import S3_BUCKET
 from .endpoints import KICKED_ENDPOINTS, ACTIVE_ENDPOINTS
 from .audit import IN_MEMORY_AUDIT_LOGS
+
+logger = logging.getLogger("telemetry")
 
 router = APIRouter(prefix="/api/v1", tags=["Telemetry"])
 
@@ -66,16 +69,36 @@ def record_telemetry(payload: TelemetryPayload):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # Ensure endpoint exists in endpoints table to satisfy foreign key
+                # 1. Resolve a valid user_id to satisfy foreign key (auto-create admin if empty)
+                valid_user_id = None
+                try:
+                    cur.execute("SELECT user_id FROM users LIMIT 1;")
+                    user_row = cur.fetchone()
+                    if user_row:
+                        valid_user_id = user_row[0]
+                    else:
+                        cur.execute("""
+                            INSERT INTO users (username, email, password_hash, role)
+                            VALUES ('system_admin', 'admin@monitoring.local', 'pbkdf2:sha256:dummyhashforinit', 'Admin')
+                            ON CONFLICT (username) DO UPDATE SET role = EXCLUDED.role
+                            RETURNING user_id;
+                        """)
+                        user_row = cur.fetchone()
+                        valid_user_id = user_row[0] if user_row else 1
+                except Exception as ue:
+                    logger.warning(f"Could not query/provision default user: {ue}")
+                    valid_user_id = 1
+
+                # 2. Ensure endpoint exists in endpoints table to satisfy foreign key
                 cur.execute("""
                     INSERT INTO endpoints (endpoint_id, user_id, hostname, os_type, agent_ver, is_active, last_seen)
-                    VALUES (%s, 1, %s, %s, '1.0.0', TRUE, CURRENT_TIMESTAMP)
+                    VALUES (%s, %s, %s, %s, '1.0.0', TRUE, CURRENT_TIMESTAMP)
                     ON CONFLICT (endpoint_id) DO UPDATE SET 
                         hostname = EXCLUDED.hostname,
                         os_type = EXCLUDED.os_type,
                         is_active = TRUE,
                         last_seen = CURRENT_TIMESTAMP;
-                """, (payload.endpoint_id, hostname, os_type))
+                """, (payload.endpoint_id, valid_user_id, hostname, os_type))
 
                 cur.execute("""
                     INSERT INTO audit_logs (
@@ -102,7 +125,6 @@ def record_telemetry(payload: TelemetryPayload):
 
                 conn.commit()
     except Exception as e:
-        # If database is offline, in-memory log has already been saved
-        pass
+        logger.error(f"[!] Database telemetry ingestion error: {e}", exc_info=True)
 
     return PresignedURLResponse(status="success", log_id=log_id, upload_url=upload_url)

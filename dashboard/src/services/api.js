@@ -213,15 +213,17 @@ export const fetchEndpoints = async () => {
   const kicked = getKickedEndpointIds();
   try {
     const res = await api.get('/endpoints');
-    if (Array.isArray(res.data) && res.data.length > 0) {
+    if (Array.isArray(res.data)) {
       const valid = res.data.filter(
         ep => !ep.name.toLowerCase().includes('ubuntu') && !kicked.includes(String(ep.endpoint_id))
       );
-      saveConsentedEndpoints(valid);
-      return valid;
+      if (valid.length > 0) {
+        saveConsentedEndpoints(valid);
+        return valid;
+      }
     }
-  } catch {
-    // Backend endpoint route offline or using local state
+  } catch (error) {
+    console.warn('Backend /endpoints unreachable:', error.message);
   }
   return getConsentedEndpoints();
 };
@@ -229,13 +231,14 @@ export const fetchEndpoints = async () => {
 export const getAuditLogs = async (limit = 100) => {
   try {
     const response = await api.get(`/audit/logs?limit=${limit}`);
-    if (Array.isArray(response.data) && response.data.length > 0) {
+    if (Array.isArray(response.data)) {
       return response.data;
     }
     return INITIAL_LOGS;
   } catch (error) {
     console.warn('Backend API offline or unreachable, using local telemetry baseline:', error.message);
-    return INITIAL_LOGS;
+    const cached = getConsentedEndpoints();
+    return cached.length > 0 ? [] : INITIAL_LOGS;
   }
 };
 

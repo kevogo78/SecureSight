@@ -1,7 +1,10 @@
+import logging
 from fastapi import APIRouter, HTTPException
 from typing import List, Optional
 from pydantic import BaseModel
 from ..database import get_db_connection
+
+logger = logging.getLogger("endpoints")
 
 router = APIRouter(prefix="/api/v1/endpoints", tags=["Endpoints"])
 
@@ -21,6 +24,7 @@ class EndpointRegistration(BaseModel):
 def list_endpoints():
     """Returns active monitored endpoints."""
     results = []
+    seen_ids = set()
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -42,6 +46,7 @@ def list_endpoints():
                 rows = cur.fetchall()
                 for r in rows:
                     ep_id = r[0]
+                    seen_ids.add(ep_id)
                     is_kicked = ep_id in KICKED_ENDPOINTS or not r[4]
                     results.append({
                         "endpoint_id": ep_id,
@@ -59,18 +64,18 @@ def list_endpoints():
                         "kicked": is_kicked,
                         "consent_granted": True
                     })
-                return results
     except Exception as e:
-        # Fallback to in-memory tracking if DB is offline
-        pass
+        logger.error(f"[!] Database list_endpoints query error: {e}", exc_info=True)
 
+    # Seamlessly merge any in-memory registered active endpoints that may not yet be committed to DB
     for ep_id, ep in ACTIVE_ENDPOINTS.items():
-        is_kicked = ep_id in KICKED_ENDPOINTS
-        results.append({
-            **ep,
-            "status": "Offline" if is_kicked else ep.get("status", "Online"),
-            "kicked": is_kicked
-        })
+        if ep_id not in seen_ids:
+            is_kicked = ep_id in KICKED_ENDPOINTS
+            results.append({
+                **ep,
+                "status": "Offline" if is_kicked else ep.get("status", "Online"),
+                "kicked": is_kicked
+            })
     return results
 
 @router.post("/register")
@@ -96,18 +101,38 @@ def register_endpoint(ep: EndpointRegistration):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
+                # 1. Resolve a valid user_id to satisfy foreign key (auto-create admin if empty)
+                valid_user_id = None
+                try:
+                    cur.execute("SELECT user_id FROM users LIMIT 1;")
+                    user_row = cur.fetchone()
+                    if user_row:
+                        valid_user_id = user_row[0]
+                    else:
+                        cur.execute("""
+                            INSERT INTO users (username, email, password_hash, role)
+                            VALUES ('system_admin', 'admin@monitoring.local', 'pbkdf2:sha256:dummyhashforinit', 'Admin')
+                            ON CONFLICT (username) DO UPDATE SET role = EXCLUDED.role
+                            RETURNING user_id;
+                        """)
+                        user_row = cur.fetchone()
+                        valid_user_id = user_row[0] if user_row else 1
+                except Exception as ue:
+                    logger.warning(f"Could not query/provision default user: {ue}")
+                    valid_user_id = 1
+
                 cur.execute("""
                     INSERT INTO endpoints (endpoint_id, user_id, hostname, os_type, agent_ver, is_active, last_seen)
-                    VALUES (%s, 1, %s, %s, %s, TRUE, CURRENT_TIMESTAMP)
+                    VALUES (%s, %s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP)
                     ON CONFLICT (endpoint_id) DO UPDATE SET 
                         hostname = EXCLUDED.hostname,
                         os_type = EXCLUDED.os_type,
                         is_active = TRUE,
                         last_seen = CURRENT_TIMESTAMP;
-                """, (ep.endpoint_id, ep.hostname, ep.os_type, ep.agent_ver))
+                """, (ep.endpoint_id, valid_user_id, ep.hostname, ep.os_type, ep.agent_ver))
                 conn.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"[!] Database register_endpoint error: {e}", exc_info=True)
 
     return {"status": "registered", "endpoint_id": ep.endpoint_id}
 
