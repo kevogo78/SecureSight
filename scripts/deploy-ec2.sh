@@ -4,7 +4,7 @@ set -e
 # Exit immediately if a command exits with a non-zero status
 # Professional deployment script for pulling code, building frontend, and restarting services
 
-APP_DIR="/home/ubuntu/endpoint-monitor-capstone"
+APP_DIR="/home/ubuntu/ITEC4810_Capstone"
 WEB_ROOT="/usr/share/nginx/html"
 
 echo "=== [1/5] Pulling Latest Commits from GitHub ==="
