@@ -13,13 +13,13 @@ import ActivityView from './components/views/ActivityView';
 import ReportsView from './components/views/ReportsView';
 import SettingsView from './components/views/SettingsView';
 
-import { 
-  getAuditLogs, 
-  getConsentedEndpoints, 
-  saveConsentedEndpoints, 
+import {
+  getAuditLogs,
+
+  saveConsentedEndpoints,
   getKickedEndpointIds,
   kickEndpointApi,
-  INITIAL_LOGS 
+  fetchEndpoints
 } from './services/api';
 
 export default function App() {
@@ -35,14 +35,11 @@ export default function App() {
 
   // Navigation State
   const [activeTab, setActiveTab] = useState('dashboard');
-  
+
   // Data State - Enforce consent policy: Only endpoints that granted consent are loaded
-  const [endpoints, setEndpoints] = useState(() => getConsentedEndpoints());
-  const [selectedEndpoint, setSelectedEndpoint] = useState(() => {
-    const list = getConsentedEndpoints();
-    return list.length > 0 ? list[0] : null;
-  });
-  const [logs, setLogs] = useState(INITIAL_LOGS);
+  const [endpoints, setEndpoints] = useState([]);
+  const [selectedEndpoint, setSelectedEndpoint] = useState(null);
+  const [logs, setLogs] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Modals
@@ -72,76 +69,14 @@ export default function App() {
   const loadTelemetryLogs = async () => {
     setIsRefreshing(true);
     try {
-      const data = await getAuditLogs(100);
-      const kicked = getKickedEndpointIds();
-
-      if (Array.isArray(data) && data.length > 0) {
-        setLogs(data);
-
-        // Auto-discover and register active endpoints dynamically from telemetry logs
-        setEndpoints((prevEndpoints) => {
-          const currentMap = new Map();
-          
-          // Retain existing unkicked endpoints
-          prevEndpoints.forEach(ep => {
-            if (!kicked.includes(String(ep.endpoint_id))) {
-              currentMap.set(String(ep.endpoint_id), { ...ep });
-            }
-          });
-
-          // Ingest all endpoints reporting in the telemetry audit logs
-          data.forEach(log => {
-            const epId = String(log.endpoint_id);
-            if (kicked.includes(epId)) return;
-
-            const existing = currentMap.get(epId);
-            if (existing) {
-              // Update existing endpoint metrics
-              currentMap.set(epId, {
-                ...existing,
-                cpu: log.cpu_percent !== undefined ? log.cpu_percent : existing.cpu,
-                ram: log.ram_percent !== undefined ? log.ram_percent : existing.ram,
-                app: log.active_app || existing.app,
-                category: log.app_category || existing.category,
-                lastSeen: 'Just now',
-                lastSeenDate: log.timestamp || new Date().toISOString(),
-                status: 'Online'
-              });
-            } else {
-              // Dynamically register newly reporting test endpoint
-              const isMac = (log.os_type || '').toLowerCase().includes('mac');
-              const newEp = {
-                endpoint_id: log.endpoint_id,
-                name: log.hostname || (log.endpoint_id === 2 ? 'MACBOOK-PRO-M2' : `WORKSTATION-EP${log.endpoint_id}`),
-                user: log.user || 'Kevin',
-                os: log.os_type || (isMac ? 'macOS 14.5 Sonoma' : 'Windows 11 Enterprise'),
-                osType: isMac ? 'mac' : 'win',
-                agent_ver: '1.0.0',
-                status: 'Online',
-                lastSeen: 'Just now',
-                lastSeenDate: log.timestamp || new Date().toISOString(),
-                ipAddress: '192.168.1.101',
-                uptime: 'Active Session',
-                cpu: log.cpu_percent || 12.0,
-                ram: log.ram_percent || 45.0,
-                disk: 42,
-                network: '14 Mbps',
-                app: log.active_app || 'Agent Active',
-                category: log.app_category || 'Development',
-                consent_granted: true,
-                consent_timestamp: log.timestamp || new Date().toISOString()
-              };
-              currentMap.set(epId, newEp);
-            }
-          });
-
-          const merged = Array.from(currentMap.values());
-          saveConsentedEndpoints(merged);
-          return merged;
-        });
-      }
+      const [data, registeredEndpoints] = await Promise.all([
+        getAuditLogs(100),
+        fetchEndpoints()
+      ]);
+      setLogs(data);
+      setEndpoints(registeredEndpoints);
     } catch (err) {
-      console.warn('Using baseline telemetry cache:', err);
+      console.warn('Failed to load live telemetry:', err);
     } finally {
       setIsRefreshing(false);
     }
@@ -178,23 +113,10 @@ export default function App() {
     }
   };
 
-  const handleAddEndpoint = (newEp) => {
-    const consentedEp = {
-      ...newEp,
-      consent_granted: true,
-      consent_timestamp: new Date().toISOString()
-    };
-    setEndpoints((prev) => {
-      const filtered = prev.filter(
-        ep => ep.name !== consentedEp.name && String(ep.endpoint_id) !== String(consentedEp.endpoint_id)
-      );
-      const updated = [consentedEp, ...filtered];
-      saveConsentedEndpoints(updated);
-      return updated;
-    });
-    setSelectedEndpoint(consentedEp);
+  const handleAddEndpoint = () => {
+    // Enrollment completes on the device after the agent receives consent.
+    loadTelemetryLogs();
   };
-
   const handleSelectEndpoint = (ep) => {
     setSelectedEndpoint(ep);
     setActiveTab('endpoint-detail');

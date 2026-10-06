@@ -223,7 +223,7 @@ export const fetchEndpoints = async () => {
   } catch {
     // Backend endpoint route offline or using local state
   }
-  return getConsentedEndpoints();
+  return [];
 };
 
 export const getAuditLogs = async (limit = 100) => {
@@ -232,10 +232,10 @@ export const getAuditLogs = async (limit = 100) => {
     if (Array.isArray(response.data) && response.data.length > 0) {
       return response.data;
     }
-    return INITIAL_LOGS;
+    return [];
   } catch (error) {
-    console.warn('Backend API offline or unreachable, using local telemetry baseline:', error.message);
-    return INITIAL_LOGS;
+    console.warn('Backend API offline or unreachable:', error.message);
+    return [];
   }
 };
 

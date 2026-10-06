@@ -74,10 +74,12 @@ class AgentOrchestrator:
                 "user": getpass.getuser(),
                 "agent_ver": "1.0.0"
             }
-            requests.post(reg_url, json=payload, timeout=3)
+            response = requests.post(reg_url, json=payload, timeout=3)
+            if response.status_code != 200:
+                print(f"Endpoint registration failed: HTTP {response.status_code}")
         except Exception as e:
             # Backend may not have endpoints route; telemetry loop will auto-enroll
-            pass
+            print(f"Endpoint registration transport failed: {e}")
 
     def handle_manual_pause(self, paused: bool):
         self.is_suspended = paused
@@ -127,6 +129,8 @@ class AgentOrchestrator:
         }
 
         res = self.api.transmit_telemetry(payload)
+        if res and res.get("upload_error"):
+            print(f"Screenshot upload unavailable: {res['upload_error']}")
         
         # Check if endpoint was de-authorized or kicked by fleet administrator
         if res and res.get("status") == "kicked":
@@ -135,7 +139,11 @@ class AgentOrchestrator:
             return
 
         if res and res.get("upload_url") and encrypted_media:
-            self.api.upload_encrypted_media(res["upload_url"], encrypted_media)
+            uploaded = self.api.upload_encrypted_media(res["upload_url"], encrypted_media)
+            print(f"Encrypted screenshot upload {'completed' if uploaded else 'failed'} (log {res.get('log_id')})")
+            if uploaded and res.get("upload_complete_path"):
+                verified = self.api.confirm_media_upload(res["upload_complete_path"])
+                print(f"S3 database confirmation {'completed' if verified else 'failed'}")
 
     def terminate(self):
         self.timer.stop()
