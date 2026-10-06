@@ -6,7 +6,7 @@ from src.core.activity_tracker import ActivityTracker, HAS_WIN32
 
 @pytest.fixture
 def tracker():
-    return ActivityTracker(poll_interval=0.1)
+    return ActivityTracker(poll_interval=0.1, enable_keystrokes=False)
 
 
 def test_activity_tracker_initialization(tracker):
@@ -57,8 +57,8 @@ def test_get_active_window_mocked(tracker):
     """Test foreground window retrieval and privacy redaction using mock."""
     with patch("src.core.activity_tracker.HAS_WIN32", True), \
          patch("src.core.activity_tracker.platform.system", return_value="Windows"), \
-         patch("src.core.activity_tracker.win32gui") as mock_win32gui, \
-         patch("src.core.activity_tracker.win32process") as mock_win32proc, \
+         patch("src.core.activity_tracker.win32gui", create=True) as mock_win32gui, \
+         patch("src.core.activity_tracker.win32process", create=True) as mock_win32proc, \
          patch("src.core.activity_tracker.psutil.Process") as mock_psutil_proc:
 
         mock_win32gui.GetForegroundWindow.return_value = 12345
