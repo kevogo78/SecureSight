@@ -1,4 +1,6 @@
 import logging
+import datetime
+import time
 from fastapi import APIRouter, HTTPException
 from typing import List, Optional
 from pydantic import BaseModel
@@ -8,8 +10,23 @@ logger = logging.getLogger("endpoints")
 
 router = APIRouter(prefix="/api/v1/endpoints", tags=["Endpoints"])
 
+# Heartbeat timeout: Agent transmits every 10 seconds.
+# If no telemetry or heartbeat received within 35 seconds (>3 intervals), mark as Offline.
+HEARTBEAT_TIMEOUT_SECONDS = 35
+
+def format_relative_time(seconds_ago: float) -> str:
+    if seconds_ago < 15:
+        return "Just now"
+    elif seconds_ago < 60:
+        return f"{int(seconds_ago)}s ago"
+    elif seconds_ago < 3600:
+        return f"{int(seconds_ago // 60)}m ago"
+    elif seconds_ago < 86400:
+        return f"{int(seconds_ago // 3600)}h ago"
+    else:
+        return f"{int(seconds_ago // 86400)}d ago"
+
 # In-memory storage for active endpoints, kicked endpoint IDs, and paused consent IDs
-# Ensures graceful operation even if PostgreSQL database connection is deferred
 ACTIVE_ENDPOINTS = {}
 KICKED_ENDPOINTS = set()
 PAUSED_ENDPOINTS = set()
@@ -24,9 +41,12 @@ class EndpointRegistration(BaseModel):
 
 @router.get("")
 def list_endpoints():
-    """Returns active monitored endpoints."""
+    """Returns monitored endpoints with live heartbeat status and connection history."""
     results = []
     seen_ids = set()
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    now_ts = time.time()
+
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -44,6 +64,7 @@ def list_endpoints():
                         LIMIT 1
                     ) latest ON true
                     WHERE e.hostname NOT IN ('WORKSTATION-WIN11', 'MACBOOK-PRO-M2')
+                      AND LOWER(e.hostname) NOT LIKE '%ubuntu%'
                     ORDER BY e.last_seen DESC;
                 """)
                 rows = cur.fetchall()
@@ -53,6 +74,26 @@ def list_endpoints():
                     is_kicked = ep_id in KICKED_ENDPOINTS or not r[4]
                     cached_ep = ACTIVE_ENDPOINTS.get(ep_id, {})
                     is_paused = ep_id in PAUSED_ENDPOINTS or cached_ep.get("consent_paused", False)
+
+                    last_seen_dt = r[5]
+                    if last_seen_dt:
+                        if last_seen_dt.tzinfo is None:
+                            last_seen_dt = last_seen_dt.replace(tzinfo=datetime.timezone.utc)
+                        seconds_ago = max(0, (now_utc - last_seen_dt).total_seconds())
+                    else:
+                        seconds_ago = 999999
+
+                    is_alive = seconds_ago <= HEARTBEAT_TIMEOUT_SECONDS
+
+                    if is_kicked:
+                        calc_status = "Kicked / Offline"
+                    elif not is_alive:
+                        calc_status = "Offline"
+                    elif is_paused:
+                        calc_status = "Paused"
+                    else:
+                        calc_status = "Online"
+
                     ip_val = cached_ep.get("ipAddress") or cached_ep.get("ip_address") or f"192.168.1.{100 + (ep_id % 150)}"
                     results.append({
                         "endpoint_id": ep_id,
@@ -60,13 +101,13 @@ def list_endpoints():
                         "os": r[2],
                         "osType": "mac" if "mac" in (r[2] or "").lower() else "win",
                         "agent_ver": r[3],
-                        "status": "Offline" if is_kicked else ("Paused" if is_paused else ("Online" if r[4] else "Offline")),
-                        "lastSeen": "Just now",
-                        "lastSeenDate": r[5].isoformat() if r[5] else None,
+                        "status": calc_status,
+                        "lastSeen": format_relative_time(seconds_ago),
+                        "lastSeenDate": last_seen_dt.isoformat() if last_seen_dt else None,
                         "user": r[6],
-                        "app": r[7] or "Agent Active",
-                        "cpu": r[8] or 0.0,
-                        "ram": r[9] or 0.0,
+                        "app": r[7] or ("Idle" if not is_alive else "Agent Active"),
+                        "cpu": r[8] if (is_alive and r[8] is not None) else 0.0,
+                        "ram": r[9] if (is_alive and r[9] is not None) else 0.0,
                         "kicked": is_kicked,
                         "consent_granted": True,
                         "consent_paused": is_paused,
@@ -78,15 +119,29 @@ def list_endpoints():
 
     # Seamlessly merge any in-memory registered active endpoints that may not yet be committed to DB
     for ep_id, ep in ACTIVE_ENDPOINTS.items():
-        if ep.get("name") in ('WORKSTATION-WIN11', 'MACBOOK-PRO-M2'):
+        if ep.get("name") in ('WORKSTATION-WIN11', 'MACBOOK-PRO-M2') or 'ubuntu' in (ep.get("name") or '').lower():
             continue
         if ep_id not in seen_ids:
             is_kicked = ep_id in KICKED_ENDPOINTS
             is_paused = ep_id in PAUSED_ENDPOINTS or ep.get("consent_paused", False)
+            last_seen_time = ep.get("last_seen_time", now_ts)
+            seconds_ago = max(0, now_ts - last_seen_time)
+            is_alive = seconds_ago <= HEARTBEAT_TIMEOUT_SECONDS
+
+            if is_kicked:
+                calc_status = "Kicked / Offline"
+            elif not is_alive:
+                calc_status = "Offline"
+            elif is_paused:
+                calc_status = "Paused"
+            else:
+                calc_status = "Online"
+
             ip_val = ep.get("ipAddress") or ep.get("ip_address") or f"192.168.1.{100 + (ep_id % 150)}"
             results.append({
                 **ep,
-                "status": "Offline" if is_kicked else ("Paused" if is_paused else ep.get("status", "Online")),
+                "status": calc_status,
+                "lastSeen": format_relative_time(seconds_ago),
                 "kicked": is_kicked,
                 "consent_paused": is_paused,
                 "ipAddress": ip_val,
@@ -98,6 +153,7 @@ def list_endpoints():
 def register_endpoint(ep: EndpointRegistration):
     """Registers an endpoint upon consent authorization."""
     ip_val = ep.ip_address or f"192.168.1.{100 + (ep.endpoint_id % 150)}"
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
     ACTIVE_ENDPOINTS[ep.endpoint_id] = {
         "endpoint_id": ep.endpoint_id,
         "name": ep.hostname,
@@ -106,6 +162,8 @@ def register_endpoint(ep: EndpointRegistration):
         "agent_ver": ep.agent_ver,
         "status": "Online",
         "lastSeen": "Just now",
+        "lastSeenDate": now_utc.isoformat(),
+        "last_seen_time": time.time(),
         "user": ep.user,
         "app": "Consent Authorized",
         "cpu": 0.0,
@@ -203,3 +261,22 @@ def resume_endpoint(endpoint_id: int):
         ACTIVE_ENDPOINTS[endpoint_id]["consent_paused"] = False
         ACTIVE_ENDPOINTS[endpoint_id]["consent_status"] = "Granted"
     return {"status": "resumed", "endpoint_id": endpoint_id}
+
+@router.post("/{endpoint_id}/disconnect")
+def disconnect_endpoint(endpoint_id: int):
+    """Marks an endpoint as disconnected / offline immediately."""
+    if endpoint_id in ACTIVE_ENDPOINTS:
+        ACTIVE_ENDPOINTS[endpoint_id]["status"] = "Offline"
+        ACTIVE_ENDPOINTS[endpoint_id]["last_seen_time"] = 0
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE endpoints 
+                    SET is_active = FALSE 
+                    WHERE endpoint_id = %s;
+                """, (endpoint_id,))
+                conn.commit()
+    except Exception:
+        pass
+    return {"status": "disconnected", "endpoint_id": endpoint_id}

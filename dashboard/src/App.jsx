@@ -39,10 +39,13 @@ export default function App() {
   // Navigation State
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // Data State - Enforce consent policy: Only endpoints that granted consent are loaded
-  const [endpoints, setEndpoints] = useState(() => getConsentedEndpoints());
-  const [selectedEndpoint, setSelectedEndpoint] = useState(() => {
+  // Data State - Enforce consent policy: Only real endpoints that granted consent are loaded
+  const [endpoints, setEndpoints] = useState(() => {
     const list = getConsentedEndpoints();
+    return list.filter(e => e.name !== 'WORKSTATION-WIN11' && e.name !== 'MACBOOK-PRO-M2' && !String(e.name || '').toLowerCase().includes('ubuntu'));
+  });
+  const [selectedEndpoint, setSelectedEndpoint] = useState(() => {
+    const list = getConsentedEndpoints().filter(e => e.name !== 'WORKSTATION-WIN11' && e.name !== 'MACBOOK-PRO-M2' && !String(e.name || '').toLowerCase().includes('ubuntu'));
     return list.length > 0 ? list[0] : null;
   });
   const [logs, setLogs] = useState(INITIAL_LOGS);
@@ -86,99 +89,73 @@ export default function App() {
       }
 
       setEndpoints((prevEndpoints) => {
-        const currentMap = new Map();
+        const now = Date.now();
+        const incomingList = Array.isArray(endpointsData) && endpointsData.length > 0 
+          ? endpointsData 
+          : prevEndpoints;
 
-        // 1. Preserve existing endpoints in local state that are not kicked
-        prevEndpoints.forEach(ep => {
+        const map = new Map();
+
+        incomingList.forEach(ep => {
           const epId = String(ep.endpoint_id);
-          if (!kicked.includes(epId)) {
-            currentMap.set(epId, { ...ep });
+          if (kicked.includes(epId)) return;
+          if (ep.name && (ep.name === 'WORKSTATION-WIN11' || ep.name === 'MACBOOK-PRO-M2' || ep.name.toLowerCase().includes('ubuntu'))) return;
+
+          const lastSeenTs = ep.lastSeenDate ? new Date(ep.lastSeenDate).getTime() : 0;
+          const isStale = (now - lastSeenTs) > 40000; // 40 seconds timeout
+          const isPaused = ep.status === 'Paused' || ep.consent_paused === true || ep.consent_status === 'Paused';
+
+          let computedStatus = 'Offline';
+          if (!isStale) {
+            computedStatus = isPaused ? 'Paused' : (ep.status === 'Offline' ? 'Offline' : 'Online');
           }
+
+          let relativeLastSeen = ep.lastSeen || 'Just now';
+          if (lastSeenTs > 0) {
+            const diffSec = Math.max(0, Math.round((now - lastSeenTs) / 1000));
+            if (diffSec < 15) relativeLastSeen = 'Just now';
+            else if (diffSec < 60) relativeLastSeen = `${diffSec}s ago`;
+            else if (diffSec < 3600) relativeLastSeen = `${Math.floor(diffSec / 60)}m ago`;
+            else if (diffSec < 86400) relativeLastSeen = `${Math.floor(diffSec / 3600)}h ago`;
+            else relativeLastSeen = `${Math.floor(diffSec / 86400)}d ago`;
+          }
+
+          // Enrich with matching telemetry audit logs if present
+          let epCpu = ep.cpu;
+          let epRam = ep.ram;
+          let epApp = ep.app;
+          let epCategory = ep.category;
+          let epIp = ep.ipAddress || ep.ip_address || `192.168.1.${100 + (Number(epId) % 150)}`;
+
+          if (Array.isArray(logsData)) {
+            const matchingLogs = logsData.filter(l => String(l.endpoint_id) === epId);
+            if (matchingLogs.length > 0) {
+              const latest = matchingLogs[0];
+              if (latest.cpu_percent !== undefined) epCpu = latest.cpu_percent;
+              if (latest.ram_percent !== undefined) epRam = latest.ram_percent;
+              if (latest.active_app) epApp = latest.active_app;
+              if (latest.app_category) epCategory = latest.app_category;
+              if (latest.ip_address) epIp = latest.ip_address;
+            }
+          }
+
+          map.set(epId, {
+            ...ep,
+            ipAddress: epIp,
+            ip_address: epIp,
+            status: computedStatus,
+            lastSeen: relativeLastSeen,
+            cpu: computedStatus === 'Offline' ? 0.0 : (epCpu || 0.0),
+            ram: computedStatus === 'Offline' ? 0.0 : (epRam || 0.0),
+            app: computedStatus === 'Offline' ? 'Idle / Disconnected' : (epApp || 'Agent Active'),
+            category: epCategory || 'Development',
+            consent_granted: true,
+            consent_paused: isPaused,
+            consent_status: isPaused ? 'Paused' : 'Granted'
+          });
         });
 
-        // 2. Ingest endpoints from the dedicated backend /endpoints API (consent-registered machines)
-        if (Array.isArray(endpointsData)) {
-          endpointsData.forEach(ep => {
-            const epId = String(ep.endpoint_id);
-            if (kicked.includes(epId)) return;
-            const existing = currentMap.get(epId);
-            const resolvedIp = ep.ipAddress || ep.ip_address || (existing && existing.ipAddress) || `192.168.1.${100 + (Number(epId) % 150)}`;
-            const isPaused = ep.status === 'Paused' || ep.consent_paused === true || (existing && (existing.status === 'Paused' || existing.consent_paused === true));
-            if (existing) {
-              currentMap.set(epId, {
-                ...existing,
-                ...ep,
-                ipAddress: resolvedIp,
-                consent_granted: true,
-                consent_paused: isPaused,
-                status: isPaused ? 'Paused' : (ep.status || existing.status || 'Online')
-              });
-            } else {
-              currentMap.set(epId, {
-                ...ep,
-                ipAddress: resolvedIp,
-                consent_granted: true,
-                consent_paused: isPaused,
-                status: isPaused ? 'Paused' : (ep.status || 'Online')
-              });
-            }
-          });
-        }
-
-        // 3. Auto-discover and enrich active endpoints dynamically from telemetry audit logs
-        if (Array.isArray(logsData)) {
-          logsData.forEach(log => {
-            const epId = String(log.endpoint_id);
-            if (kicked.includes(epId)) return;
-
-            const existing = currentMap.get(epId);
-            const isLogPaused = (log.activity_state === 'Privacy_Suspended' && log.filter_status === 'User_Suspended');
-            const resolvedIp = log.ip_address || (existing && existing.ipAddress) || `192.168.1.${100 + (Number(epId) % 150)}`;
-
-            if (existing) {
-              const currentStatus = isLogPaused ? 'Paused' : (existing.status || 'Online');
-              currentMap.set(epId, {
-                ...existing,
-                ipAddress: resolvedIp,
-                cpu: log.cpu_percent !== undefined ? log.cpu_percent : existing.cpu,
-                ram: log.ram_percent !== undefined ? log.ram_percent : existing.ram,
-                app: log.active_app || existing.app,
-                category: log.app_category || existing.category,
-                lastSeen: 'Just now',
-                lastSeenDate: log.timestamp || new Date().toISOString(),
-                status: currentStatus,
-                consent_paused: isLogPaused || existing.consent_paused || currentStatus === 'Paused'
-              });
-            } else {
-              const isMac = (log.os_type || '').toLowerCase().includes('mac');
-              const newEp = {
-                endpoint_id: log.endpoint_id,
-                name: log.hostname || (log.endpoint_id === 2 ? 'MACBOOK-PRO-M2' : `WORKSTATION-EP${log.endpoint_id}`),
-                user: log.user || 'Authorized User',
-                os: log.os_type || (isMac ? 'macOS 14.5 Sonoma' : 'Windows 11 Enterprise'),
-                osType: isMac ? 'mac' : 'win',
-                agent_ver: '1.0.0',
-                status: isLogPaused ? 'Paused' : 'Online',
-                lastSeen: 'Just now',
-                lastSeenDate: log.timestamp || new Date().toISOString(),
-                ipAddress: resolvedIp,
-                uptime: 'Active Session',
-                cpu: log.cpu_percent || 12.0,
-                ram: log.ram_percent || 45.0,
-                disk: 42,
-                network: '14 Mbps',
-                app: log.active_app || 'Agent Active',
-                category: log.app_category || 'Development',
-                consent_granted: true,
-                consent_paused: isLogPaused,
-                consent_timestamp: log.timestamp || new Date().toISOString()
-              };
-              currentMap.set(epId, newEp);
-            }
-          });
-        }
-
-        const merged = Array.from(currentMap.values());
+        const merged = Array.from(map.values());
         saveConsentedEndpoints(merged);
         return merged;
       });
@@ -290,7 +267,7 @@ export default function App() {
           }
         }}
         onLogout={handleLogout}
-        endpointsCount={endpoints.length}
+        endpointsCount={endpoints.filter(e => !e.kicked && (e.status === 'Online' || e.status === 'Paused')).length}
       />
 
       {/* ================= MAIN VIEWPORT ================= */}

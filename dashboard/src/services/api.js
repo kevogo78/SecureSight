@@ -111,6 +111,14 @@ export const resumeEndpointApi = async (endpointId) => {
   }
 };
 
+export const disconnectEndpointApi = async (endpointId) => {
+  try {
+    await api.post(`/endpoints/${endpointId}/disconnect`);
+  } catch (e) {
+    console.info(`Endpoint ${endpointId} disconnected locally:`, e.message);
+  }
+};
+
 export const fetchEndpoints = async () => {
   const kicked = getKickedEndpointIds();
   try {
@@ -136,7 +144,9 @@ export const getAuditLogs = async (limit = 100) => {
     const response = await api.get(`/audit/logs?limit=${limit}`);
     if (Array.isArray(response.data)) {
       return response.data.filter(
-        l => l.hostname !== 'WORKSTATION-WIN11' && l.hostname !== 'MACBOOK-PRO-M2'
+        l => l.hostname !== 'WORKSTATION-WIN11' && 
+             l.hostname !== 'MACBOOK-PRO-M2' &&
+             !String(l.hostname || '').toLowerCase().includes('ubuntu')
       );
     }
     return [];

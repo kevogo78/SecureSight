@@ -7,6 +7,6 @@ ON CONFLICT (username) DO NOTHING;
 
 -- Cleanup any previous mock test endpoints and audit logs
 DELETE FROM audit_logs WHERE endpoint_id IN (
-    SELECT endpoint_id FROM endpoints WHERE hostname IN ('WORKSTATION-WIN11', 'MACBOOK-PRO-M2')
+    SELECT endpoint_id FROM endpoints WHERE hostname IN ('WORKSTATION-WIN11', 'MACBOOK-PRO-M2') OR LOWER(hostname) LIKE '%ubuntu%'
 );
-DELETE FROM endpoints WHERE hostname IN ('WORKSTATION-WIN11', 'MACBOOK-PRO-M2');
+DELETE FROM endpoints WHERE hostname IN ('WORKSTATION-WIN11', 'MACBOOK-PRO-M2') OR LOWER(hostname) LIKE '%ubuntu%';

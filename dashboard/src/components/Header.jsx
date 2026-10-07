@@ -28,7 +28,7 @@ export default function Header({
     {
       id: 1,
       title: 'DLP Incident Masked',
-      desc: 'Password control input suppressed on WORKSTATION-WIN11',
+      desc: 'Password control input suppressed on monitored workstation',
       time: '9 mins ago',
       type: 'alert'
     },
