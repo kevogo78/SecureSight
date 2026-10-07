@@ -11,4 +11,14 @@ export default defineConfig({
     }
   },
   base: '/', // Ensure base is set to root
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        secure: false,
+      }
+    }
+  }
 });

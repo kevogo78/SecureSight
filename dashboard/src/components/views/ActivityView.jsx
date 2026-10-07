@@ -4,7 +4,6 @@ import {
   Filter, Calendar, ExternalLink, ShieldCheck 
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import ActivityHeatmap from '../ActivityHeatmap';
 
 export default function ActivityView({ 
   logs = [], 
@@ -105,9 +104,6 @@ export default function ActivityView({
           <ShieldAlert className="w-7 h-7 text-amber-600" />
         </div>
       </div>
-
-      {/* Timeline Heatmap Component */}
-      <ActivityHeatmap logs={filteredLogs} />
 
       {/* Split Grid: Event Log Table vs Doughnut Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

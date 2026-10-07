@@ -253,3 +253,6 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Local Telemetry & Audit Logs
+*keystrokes_audit.txt

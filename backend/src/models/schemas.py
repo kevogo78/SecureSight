@@ -11,12 +11,14 @@ class TelemetryPayload(BaseModel):
     ram_percent: float = Field(..., ge=0.0, le=100.0)
     filter_status: str = Field(default="Clean", max_length=50)
     dlp_flag: bool = Field(default=False)
+    consent_paused: Optional[bool] = False
     capture_requested: bool = False
     file_hash: Optional[str] = None
     encryption_iv: Optional[str] = None
     hostname: Optional[str] = None
     os_type: Optional[str] = None
     user: Optional[str] = None
+    ip_address: Optional[str] = None
 
 class PresignedURLResponse(BaseModel):
     status: str

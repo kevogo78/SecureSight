@@ -24,4 +24,3 @@ app.include_router(endpoints.router)
 @app.get("/health")
 def health_check():
     return {"status": "healthy", "service": "telemetry-backend"}
-    return {"status": "healthy", "service": "telemetry-backend"}

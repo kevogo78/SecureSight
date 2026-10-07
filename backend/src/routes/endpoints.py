@@ -1,14 +1,18 @@
+import logging
 from fastapi import APIRouter, HTTPException
 from typing import List, Optional
 from pydantic import BaseModel
 from ..database import get_db_connection
 
+logger = logging.getLogger("endpoints")
+
 router = APIRouter(prefix="/api/v1/endpoints", tags=["Endpoints"])
 
-# In-memory storage for active endpoints and kicked endpoint IDs
+# In-memory storage for active endpoints, kicked endpoint IDs, and paused consent IDs
 # Ensures graceful operation even if PostgreSQL database connection is deferred
 ACTIVE_ENDPOINTS = {}
 KICKED_ENDPOINTS = set()
+PAUSED_ENDPOINTS = set()
 
 class EndpointRegistration(BaseModel):
     endpoint_id: int
@@ -16,11 +20,13 @@ class EndpointRegistration(BaseModel):
     os_type: str = "Windows 11 Enterprise"
     user: str = "Authorized User"
     agent_ver: str = "1.0.0"
+    ip_address: Optional[str] = None
 
 @router.get("")
 def list_endpoints():
     """Returns active monitored endpoints."""
     results = []
+    seen_ids = set()
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -42,14 +48,18 @@ def list_endpoints():
                 rows = cur.fetchall()
                 for r in rows:
                     ep_id = r[0]
+                    seen_ids.add(ep_id)
                     is_kicked = ep_id in KICKED_ENDPOINTS or not r[4]
+                    cached_ep = ACTIVE_ENDPOINTS.get(ep_id, {})
+                    is_paused = ep_id in PAUSED_ENDPOINTS or cached_ep.get("consent_paused", False)
+                    ip_val = cached_ep.get("ipAddress") or cached_ep.get("ip_address") or f"192.168.1.{100 + (ep_id % 150)}"
                     results.append({
                         "endpoint_id": ep_id,
                         "name": r[1],
                         "os": r[2],
                         "osType": "mac" if "mac" in (r[2] or "").lower() else "win",
                         "agent_ver": r[3],
-                        "status": "Offline" if is_kicked else ("Online" if r[4] else "Offline"),
+                        "status": "Offline" if is_kicked else ("Paused" if is_paused else ("Online" if r[4] else "Offline")),
                         "lastSeen": "Just now",
                         "lastSeenDate": r[5].isoformat() if r[5] else None,
                         "user": r[6],
@@ -57,25 +67,34 @@ def list_endpoints():
                         "cpu": r[8] or 0.0,
                         "ram": r[9] or 0.0,
                         "kicked": is_kicked,
-                        "consent_granted": True
+                        "consent_granted": True,
+                        "consent_paused": is_paused,
+                        "ipAddress": ip_val,
+                        "ip_address": ip_val
                     })
-                return results
     except Exception as e:
-        # Fallback to in-memory tracking if DB is offline
-        pass
+        logger.error(f"[!] Database list_endpoints query error: {e}", exc_info=True)
 
+    # Seamlessly merge any in-memory registered active endpoints that may not yet be committed to DB
     for ep_id, ep in ACTIVE_ENDPOINTS.items():
-        is_kicked = ep_id in KICKED_ENDPOINTS
-        results.append({
-            **ep,
-            "status": "Offline" if is_kicked else ep.get("status", "Online"),
-            "kicked": is_kicked
-        })
+        if ep_id not in seen_ids:
+            is_kicked = ep_id in KICKED_ENDPOINTS
+            is_paused = ep_id in PAUSED_ENDPOINTS or ep.get("consent_paused", False)
+            ip_val = ep.get("ipAddress") or ep.get("ip_address") or f"192.168.1.{100 + (ep_id % 150)}"
+            results.append({
+                **ep,
+                "status": "Offline" if is_kicked else ("Paused" if is_paused else ep.get("status", "Online")),
+                "kicked": is_kicked,
+                "consent_paused": is_paused,
+                "ipAddress": ip_val,
+                "ip_address": ip_val
+            })
     return results
 
 @router.post("/register")
 def register_endpoint(ep: EndpointRegistration):
     """Registers an endpoint upon consent authorization."""
+    ip_val = ep.ip_address or f"192.168.1.{100 + (ep.endpoint_id % 150)}"
     ACTIVE_ENDPOINTS[ep.endpoint_id] = {
         "endpoint_id": ep.endpoint_id,
         "name": ep.hostname,
@@ -88,7 +107,10 @@ def register_endpoint(ep: EndpointRegistration):
         "app": "Consent Authorized",
         "cpu": 0.0,
         "ram": 0.0,
-        "consent_granted": True
+        "consent_granted": True,
+        "consent_paused": False,
+        "ipAddress": ip_val,
+        "ip_address": ip_val
     }
     # Unkick if re-authorized
     KICKED_ENDPOINTS.discard(ep.endpoint_id)
@@ -96,18 +118,38 @@ def register_endpoint(ep: EndpointRegistration):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
+                # 1. Resolve a valid user_id to satisfy foreign key (auto-create admin if empty)
+                valid_user_id = None
+                try:
+                    cur.execute("SELECT user_id FROM users LIMIT 1;")
+                    user_row = cur.fetchone()
+                    if user_row:
+                        valid_user_id = user_row[0]
+                    else:
+                        cur.execute("""
+                            INSERT INTO users (username, email, password_hash, role)
+                            VALUES ('system_admin', 'admin@monitoring.local', 'pbkdf2:sha256:dummyhashforinit', 'Admin')
+                            ON CONFLICT (username) DO UPDATE SET role = EXCLUDED.role
+                            RETURNING user_id;
+                        """)
+                        user_row = cur.fetchone()
+                        valid_user_id = user_row[0] if user_row else 1
+                except Exception as ue:
+                    logger.warning(f"Could not query/provision default user: {ue}")
+                    valid_user_id = 1
+
                 cur.execute("""
                     INSERT INTO endpoints (endpoint_id, user_id, hostname, os_type, agent_ver, is_active, last_seen)
-                    VALUES (%s, 1, %s, %s, %s, TRUE, CURRENT_TIMESTAMP)
+                    VALUES (%s, %s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP)
                     ON CONFLICT (endpoint_id) DO UPDATE SET 
                         hostname = EXCLUDED.hostname,
                         os_type = EXCLUDED.os_type,
                         is_active = TRUE,
                         last_seen = CURRENT_TIMESTAMP;
-                """, (ep.endpoint_id, ep.hostname, ep.os_type, ep.agent_ver))
+                """, (ep.endpoint_id, valid_user_id, ep.hostname, ep.os_type, ep.agent_ver))
                 conn.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"[!] Database register_endpoint error: {e}", exc_info=True)
 
     return {"status": "registered", "endpoint_id": ep.endpoint_id}
 
@@ -136,4 +178,25 @@ def kick_endpoint(endpoint_id: int):
 def get_endpoint_status(endpoint_id: int):
     """Allows client agent to poll or check if it has been kicked."""
     is_kicked = endpoint_id in KICKED_ENDPOINTS
-    return {"endpoint_id": endpoint_id, "kicked": is_kicked}
+    is_paused = endpoint_id in PAUSED_ENDPOINTS
+    return {"endpoint_id": endpoint_id, "kicked": is_kicked, "paused": is_paused}
+
+@router.post("/{endpoint_id}/pause")
+def pause_endpoint(endpoint_id: int):
+    """Pauses consent monitoring for an endpoint."""
+    PAUSED_ENDPOINTS.add(endpoint_id)
+    if endpoint_id in ACTIVE_ENDPOINTS:
+        ACTIVE_ENDPOINTS[endpoint_id]["status"] = "Paused"
+        ACTIVE_ENDPOINTS[endpoint_id]["consent_paused"] = True
+        ACTIVE_ENDPOINTS[endpoint_id]["consent_status"] = "Paused"
+    return {"status": "paused", "endpoint_id": endpoint_id}
+
+@router.post("/{endpoint_id}/resume")
+def resume_endpoint(endpoint_id: int):
+    """Resumes consent monitoring for an endpoint."""
+    PAUSED_ENDPOINTS.discard(endpoint_id)
+    if endpoint_id in ACTIVE_ENDPOINTS:
+        ACTIVE_ENDPOINTS[endpoint_id]["status"] = "Online"
+        ACTIVE_ENDPOINTS[endpoint_id]["consent_paused"] = False
+        ACTIVE_ENDPOINTS[endpoint_id]["consent_status"] = "Granted"
+    return {"status": "resumed", "endpoint_id": endpoint_id}

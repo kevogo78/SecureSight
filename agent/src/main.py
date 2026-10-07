@@ -23,6 +23,19 @@ CONFIG = {
     "interval_ms": 10000
 }
 
+def get_local_ip() -> str:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except Exception:
+            return "192.168.1.101"
+
 def derive_endpoint_id(name: str) -> int:
     if not name:
         return 1
@@ -72,7 +85,8 @@ class AgentOrchestrator:
                 "hostname": self.endpoint_name,
                 "os_type": f"{platform.system()} {platform.release()}",
                 "user": getpass.getuser(),
-                "agent_ver": "1.0.0"
+                "agent_ver": "1.0.0",
+                "ip_address": get_local_ip()
             }
             response = requests.post(reg_url, json=payload, timeout=3)
             if response.status_code != 200:
@@ -83,6 +97,12 @@ class AgentOrchestrator:
 
     def handle_manual_pause(self, paused: bool):
         self.is_suspended = paused
+        try:
+            action = "pause" if paused else "resume"
+            pause_url = self.server_url.replace("/telemetry", f"/endpoints/{self.endpoint_id}/{action}")
+            requests.post(pause_url, timeout=2)
+        except Exception:
+            pass
 
     def execute_polling_loop(self):
         self.tick_counter += 1
@@ -120,12 +140,14 @@ class AgentOrchestrator:
             "ram_percent": metrics["ram_percent"],
             "filter_status": status_msg,
             "dlp_flag": is_sensitive,
+            "consent_paused": self.is_suspended,
             "capture_requested": capture_requested,
             "file_hash": file_hash,
             "encryption_iv": iv_hex,
             "hostname": self.endpoint_name,
             "os_type": f"{platform.system()} {platform.release()}",
-            "user": getpass.getuser()
+            "user": getpass.getuser(),
+            "ip_address": get_local_ip()
         }
 
         res = self.api.transmit_telemetry(payload)
