@@ -43,6 +43,7 @@ def list_endpoints():
                         ORDER BY timestamp DESC
                         LIMIT 1
                     ) latest ON true
+                    WHERE e.hostname NOT IN ('WORKSTATION-WIN11', 'MACBOOK-PRO-M2')
                     ORDER BY e.last_seen DESC;
                 """)
                 rows = cur.fetchall()
@@ -77,6 +78,8 @@ def list_endpoints():
 
     # Seamlessly merge any in-memory registered active endpoints that may not yet be committed to DB
     for ep_id, ep in ACTIVE_ENDPOINTS.items():
+        if ep.get("name") in ('WORKSTATION-WIN11', 'MACBOOK-PRO-M2'):
+            continue
         if ep_id not in seen_ids:
             is_kicked = ep_id in KICKED_ENDPOINTS
             is_paused = ep_id in PAUSED_ENDPOINTS or ep.get("consent_paused", False)

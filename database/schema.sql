@@ -20,6 +20,18 @@ CREATE TABLE IF NOT EXISTS endpoints (
     last_seen TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS telemetry_logs (
+    telemetry_id BIGSERIAL PRIMARY KEY,
+    endpoint_id INT REFERENCES endpoints(endpoint_id) ON DELETE CASCADE,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    cpu_percent REAL,
+    ram_percent REAL,
+    disk_percent REAL,
+    network_sent_bytes BIGINT DEFAULT 0,
+    network_recv_bytes BIGINT DEFAULT 0,
+    system_uptime_seconds BIGINT
+);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
     log_id BIGSERIAL PRIMARY KEY,
     endpoint_id INT REFERENCES endpoints(endpoint_id) ON DELETE CASCADE,
@@ -45,6 +57,7 @@ CREATE TABLE IF NOT EXISTS media_captures (
 );
 
 -- Performance Indices for Dashboard Aggregations
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_endpoint_timestamp ON telemetry_logs(endpoint_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_endpoint_timestamp ON audit_logs(endpoint_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_filter_status ON audit_logs(filter_status);
 CREATE INDEX IF NOT EXISTS idx_media_captures_log_id ON media_captures(log_id);
