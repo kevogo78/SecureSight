@@ -5,7 +5,7 @@ from ..models.schemas import TelemetryPayload, PresignedURLResponse
 from ..database import get_db_connection
 from ..utils.s3_helper import generate_upload_url
 from ..config import S3_BUCKET
-from .endpoints import KICKED_ENDPOINTS, ACTIVE_ENDPOINTS
+from .endpoints import KICKED_ENDPOINTS, ACTIVE_ENDPOINTS, PAUSED_ENDPOINTS
 from .audit import IN_MEMORY_AUDIT_LOGS
 
 logger = logging.getLogger("telemetry")
@@ -23,13 +23,26 @@ def record_telemetry(payload: TelemetryPayload):
     os_type = payload.os_type or "Windows 11 Enterprise"
     user_name = payload.user or "Authorized User"
     
+    is_paused = (
+        payload.endpoint_id in PAUSED_ENDPOINTS or 
+        bool(payload.consent_paused) or 
+        payload.filter_status == "User_Suspended"
+    )
+    if is_paused:
+        PAUSED_ENDPOINTS.add(payload.endpoint_id)
+    else:
+        PAUSED_ENDPOINTS.discard(payload.endpoint_id)
+
+    status_str = "Paused" if is_paused else "Online"
+    ip_val = payload.ip_address or ACTIVE_ENDPOINTS.get(payload.endpoint_id, {}).get("ipAddress") or f"192.168.1.{100 + (payload.endpoint_id % 150)}"
+
     ACTIVE_ENDPOINTS[payload.endpoint_id] = {
         "endpoint_id": payload.endpoint_id,
         "name": hostname,
         "os": os_type,
         "osType": "mac" if "mac" in os_type.lower() else "win",
         "agent_ver": "1.0.0",
-        "status": "Online",
+        "status": status_str,
         "lastSeen": "Just now",
         "lastSeenDate": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "user": user_name,
@@ -37,7 +50,11 @@ def record_telemetry(payload: TelemetryPayload):
         "cpu": payload.cpu_percent,
         "ram": payload.ram_percent,
         "category": payload.app_category,
-        "consent_granted": True
+        "consent_granted": True,
+        "consent_paused": is_paused,
+        "consent_status": "Paused" if is_paused else "Granted",
+        "ipAddress": ip_val,
+        "ip_address": ip_val
     }
 
     # 3. Store in-memory audit log for real-time dashboard reactivity
@@ -56,7 +73,8 @@ def record_telemetry(payload: TelemetryPayload):
         "media_url": None,
         "hostname": hostname,
         "os_type": os_type,
-        "user": user_name
+        "user": user_name,
+        "ip_address": ip_val
     }
     IN_MEMORY_AUDIT_LOGS.insert(0, log_entry)
     if len(IN_MEMORY_AUDIT_LOGS) > 500:

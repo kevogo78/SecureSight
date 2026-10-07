@@ -20,6 +20,8 @@ import {
   saveConsentedEndpoints, 
   getKickedEndpointIds,
   kickEndpointApi,
+  pauseEndpointApi,
+  resumeEndpointApi,
   INITIAL_LOGS 
 } from './services/api';
 
@@ -100,18 +102,24 @@ export default function App() {
             const epId = String(ep.endpoint_id);
             if (kicked.includes(epId)) return;
             const existing = currentMap.get(epId);
+            const resolvedIp = ep.ipAddress || ep.ip_address || (existing && existing.ipAddress) || `192.168.1.${100 + (Number(epId) % 150)}`;
+            const isPaused = ep.status === 'Paused' || ep.consent_paused === true || (existing && (existing.status === 'Paused' || existing.consent_paused === true));
             if (existing) {
               currentMap.set(epId, {
                 ...existing,
                 ...ep,
+                ipAddress: resolvedIp,
                 consent_granted: true,
-                status: ep.status || existing.status || 'Online'
+                consent_paused: isPaused,
+                status: isPaused ? 'Paused' : (ep.status || existing.status || 'Online')
               });
             } else {
               currentMap.set(epId, {
                 ...ep,
+                ipAddress: resolvedIp,
                 consent_granted: true,
-                status: ep.status || 'Online'
+                consent_paused: isPaused,
+                status: isPaused ? 'Paused' : (ep.status || 'Online')
               });
             }
           });
@@ -124,16 +132,22 @@ export default function App() {
             if (kicked.includes(epId)) return;
 
             const existing = currentMap.get(epId);
+            const isLogPaused = (log.activity_state === 'Privacy_Suspended' && log.filter_status === 'User_Suspended');
+            const resolvedIp = log.ip_address || (existing && existing.ipAddress) || `192.168.1.${100 + (Number(epId) % 150)}`;
+
             if (existing) {
+              const currentStatus = isLogPaused ? 'Paused' : (existing.status || 'Online');
               currentMap.set(epId, {
                 ...existing,
+                ipAddress: resolvedIp,
                 cpu: log.cpu_percent !== undefined ? log.cpu_percent : existing.cpu,
                 ram: log.ram_percent !== undefined ? log.ram_percent : existing.ram,
                 app: log.active_app || existing.app,
                 category: log.app_category || existing.category,
                 lastSeen: 'Just now',
                 lastSeenDate: log.timestamp || new Date().toISOString(),
-                status: 'Online'
+                status: currentStatus,
+                consent_paused: isLogPaused || existing.consent_paused || currentStatus === 'Paused'
               });
             } else {
               const isMac = (log.os_type || '').toLowerCase().includes('mac');
@@ -144,10 +158,10 @@ export default function App() {
                 os: log.os_type || (isMac ? 'macOS 14.5 Sonoma' : 'Windows 11 Enterprise'),
                 osType: isMac ? 'mac' : 'win',
                 agent_ver: '1.0.0',
-                status: 'Online',
+                status: isLogPaused ? 'Paused' : 'Online',
                 lastSeen: 'Just now',
                 lastSeenDate: log.timestamp || new Date().toISOString(),
-                ipAddress: '192.168.1.101',
+                ipAddress: resolvedIp,
                 uptime: 'Active Session',
                 cpu: log.cpu_percent || 12.0,
                 ram: log.ram_percent || 45.0,
@@ -156,6 +170,7 @@ export default function App() {
                 app: log.active_app || 'Agent Active',
                 category: log.app_category || 'Development',
                 consent_granted: true,
+                consent_paused: isLogPaused,
                 consent_timestamp: log.timestamp || new Date().toISOString()
               };
               currentMap.set(epId, newEp);
@@ -202,6 +217,37 @@ export default function App() {
     if (selectedEndpoint && String(selectedEndpoint.endpoint_id) === String(endpointId)) {
       setSelectedEndpoint(null);
       setActiveTab('endpoints');
+    }
+  };
+
+  const handleTogglePauseEndpoint = async (endpointId) => {
+    let nowPaused = false;
+    setEndpoints((prev) => {
+      const updated = prev.map(ep => {
+        if (String(ep.endpoint_id) === String(endpointId)) {
+          const currentlyPaused = ep.status === 'Paused' || ep.consent_paused === true;
+          nowPaused = !currentlyPaused;
+          return {
+            ...ep,
+            status: nowPaused ? 'Paused' : 'Online',
+            consent_paused: nowPaused,
+            consent_status: nowPaused ? 'Paused' : 'Granted'
+          };
+        }
+        return ep;
+      });
+      saveConsentedEndpoints(updated);
+      return updated;
+    });
+
+    try {
+      if (nowPaused) {
+        await pauseEndpointApi(endpointId);
+      } else {
+        await resumeEndpointApi(endpointId);
+      }
+    } catch (e) {
+      console.warn('Error syncing pause state with backend:', e);
     }
   };
 
@@ -275,8 +321,8 @@ export default function App() {
             <EndpointsView
               endpoints={endpoints}
               onSelectEndpoint={handleSelectEndpoint}
-              onOpenAddModal={() => setIsAddEndpointOpen(true)}
               onKickEndpoint={handleKickEndpoint}
+              onTogglePauseEndpoint={handleTogglePauseEndpoint}
               logs={logs}
             />
           )}

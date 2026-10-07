@@ -8,6 +8,7 @@ import {
 import { 
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar 
 } from 'recharts';
+import ActivityHeatmap from '../ActivityHeatmap';
 
 export default function EndpointDetailView({ 
   endpoint, 
@@ -105,15 +106,19 @@ export default function EndpointDetailView({
             <div className="flex items-center gap-2.5">
               <h3 className="text-2xl font-black tracking-tight text-slate-900">{endpoint.name}</h3>
               <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded-full ${
-                endpoint.status === 'Online' ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-slate-600 bg-slate-100'
+                (endpoint.status === 'Paused' || endpoint.consent_paused)
+                  ? 'text-amber-800 bg-amber-50 border border-amber-300'
+                  : endpoint.status === 'Online'
+                    ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+                    : 'text-slate-600 bg-slate-100'
               }`}>
-                ● {endpoint.status}
+                {(endpoint.status === 'Paused' || endpoint.consent_paused) ? '⏸ Consent Paused' : `● ${endpoint.status}`}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-6 text-xs text-slate-500 mt-2">
               <div>Assigned User: <strong className="text-slate-800">{endpoint.user}</strong></div>
               <div>Operating System: <strong className="text-slate-800">{endpoint.os}</strong></div>
-              <div>IP Address: <strong className="text-slate-800 font-mono">{endpoint.ipAddress}</strong></div>
+              <div>IP Address: <strong className="text-slate-800 font-mono">{endpoint.ipAddress || endpoint.ip_address || endpoint.ip || `192.168.1.${100 + (Number(endpoint.endpoint_id || 1) % 150)}`}</strong></div>
               <div>Session Uptime: <strong className="text-slate-800">{endpoint.uptime}</strong></div>
               <div>Agent Version: <strong className="text-slate-800 font-mono">{endpoint.agent_ver}</strong></div>
             </div>
@@ -156,7 +161,7 @@ export default function EndpointDetailView({
         {[
           { id: 'activity', label: 'Activity' },
           { id: 'applications', label: 'Applications' },
-          { id: 'websites', label: 'Websites' },
+          { id: 'timeline', label: 'Activity Index & DLP Timeline' },
           { id: 'keylogs', label: 'Keylogs' },
           { id: 'screenshots', label: 'Screenshots & Recordings' },
           { id: 'system', label: 'System Usage' },
@@ -280,6 +285,10 @@ export default function EndpointDetailView({
               <strong className="text-slate-900">{latestLog.keystrokes || 0} KPM</strong>
             </div>
           </div>
+
+          <div className="lg:col-span-3">
+            <ActivityHeatmap logs={endpointLogs} />
+          </div>
         </div>
       )}
 
@@ -309,45 +318,10 @@ export default function EndpointDetailView({
         </div>
       )}
 
-      {/* SUB-TAB CONTENT 3: WEBSITES */}
-      {activeSubTab === 'websites' && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
-          <h4 className="font-bold text-sm text-slate-900">Browser Network Telemetry</h4>
-          <table className="w-full text-xs text-left">
-            <thead>
-              <tr className="border-b border-slate-100 text-slate-400">
-                <th className="pb-2">Domain / URL</th>
-                <th className="pb-2">Duration</th>
-                <th className="pb-2">DLP Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
-              <tr>
-                <td className="py-3 font-semibold text-slate-900 flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-blue-500" />
-                  <span>github.com/ITEC4810_Capstone</span>
-                </td>
-                <td className="py-3">48 sessions</td>
-                <td className="py-3 text-emerald-600 font-semibold">Clean (Permitted)</td>
-              </tr>
-              <tr>
-                <td className="py-3 font-semibold text-slate-900 flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-blue-500" />
-                  <span>chase.com/[REDACTED_PORTAL]</span>
-                </td>
-                <td className="py-3">1 session</td>
-                <td className="py-3 text-amber-600 font-bold">Privacy Masked (Title Blacklisted)</td>
-              </tr>
-              <tr>
-                <td className="py-3 font-semibold text-slate-900 flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-blue-500" />
-                  <span>aws.amazon.com/console</span>
-                </td>
-                <td className="py-3">22 sessions</td>
-                <td className="py-3 text-emerald-600 font-semibold">Clean (Cloud Ingestion)</td>
-              </tr>
-            </tbody>
-          </table>
+      {/* SUB-TAB CONTENT 3: ACTIVITY INDEX & DLP TIMELINE (Replaces Websites) */}
+      {activeSubTab === 'timeline' && (
+        <div className="space-y-4">
+          <ActivityHeatmap logs={endpointLogs} />
         </div>
       )}
 

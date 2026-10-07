@@ -172,11 +172,16 @@ export const getConsentedEndpoints = () => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.filter(
-          ep => ep.consent_granted === true && 
-          !ep.name.toLowerCase().includes('ubuntu') &&
-          !kicked.includes(String(ep.endpoint_id))
-        );
+        return parsed
+          .filter(
+            ep => ep.consent_granted === true && 
+            !ep.name.toLowerCase().includes('ubuntu') &&
+            !kicked.includes(String(ep.endpoint_id))
+          )
+          .map(ep => ({
+            ...ep,
+            ipAddress: ep.ipAddress || ep.ip_address || `192.168.1.${100 + (Number(ep.endpoint_id || 1) % 150)}`
+          }));
       }
     }
   } catch {
@@ -188,11 +193,16 @@ export const getConsentedEndpoints = () => {
 export const saveConsentedEndpoints = (endpoints) => {
   const kicked = getKickedEndpointIds();
   try {
-    const valid = endpoints.filter(
-      ep => ep.consent_granted === true && 
-      !ep.name.toLowerCase().includes('ubuntu') &&
-      !kicked.includes(String(ep.endpoint_id))
-    );
+    const valid = endpoints
+      .filter(
+        ep => ep.consent_granted === true && 
+        !ep.name.toLowerCase().includes('ubuntu') &&
+        !kicked.includes(String(ep.endpoint_id))
+      )
+      .map(ep => ({
+        ...ep,
+        ipAddress: ep.ipAddress || ep.ip_address || `192.168.1.${100 + (Number(ep.endpoint_id || 1) % 150)}`
+      }));
     localStorage.setItem('edmt_consented_endpoints', JSON.stringify(valid));
   } catch (e) {
     console.warn('Failed to save consented endpoints:', e);
@@ -206,6 +216,22 @@ export const kickEndpointApi = async (endpointId) => {
   } catch (e) {
     // Endpoint may be offline or standalone
     console.info(`Endpoint ${endpointId} kicked locally:`, e.message);
+  }
+};
+
+export const pauseEndpointApi = async (endpointId) => {
+  try {
+    await api.post(`/endpoints/${endpointId}/pause`);
+  } catch (e) {
+    console.info(`Endpoint ${endpointId} paused locally:`, e.message);
+  }
+};
+
+export const resumeEndpointApi = async (endpointId) => {
+  try {
+    await api.post(`/endpoints/${endpointId}/resume`);
+  } catch (e) {
+    console.info(`Endpoint ${endpointId} resumed locally:`, e.message);
   }
 };
 
