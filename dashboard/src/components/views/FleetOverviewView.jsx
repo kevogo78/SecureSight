@@ -63,13 +63,13 @@ export default function FleetOverviewView({
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div 
-          onClick={() => onNavigate('endpoints')}
+          onClick={() => onNavigate('endpoints', 'all')}
           className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between cursor-pointer hover:border-emerald-500 transition"
         >
           <div>
             <div className="text-xs font-semibold text-slate-500">Fleet Endpoints</div>
             <div className="text-3xl font-black text-[#15803d] mt-2">{totalCount}</div>
-            <div className="text-[11px] text-slate-500 mt-1">Manage Workstations →</div>
+            <div className="text-[11px] text-slate-500 mt-1">View All Workstations →</div>
           </div>
           <div className="p-3 bg-slate-100 rounded-xl text-slate-700">
             <Monitor className="w-7 h-7" />
@@ -77,7 +77,7 @@ export default function FleetOverviewView({
         </div>
 
         <div 
-          onClick={() => onNavigate('endpoints')}
+          onClick={() => onNavigate('endpoints', 'connected')}
           className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between cursor-pointer hover:border-emerald-500 transition"
         >
           <div>
@@ -91,7 +91,7 @@ export default function FleetOverviewView({
         </div>
 
         <div 
-          onClick={() => onNavigate('endpoints')}
+          onClick={() => onNavigate('endpoints', 'offline')}
           className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between cursor-pointer hover:border-emerald-500 transition"
         >
           <div>

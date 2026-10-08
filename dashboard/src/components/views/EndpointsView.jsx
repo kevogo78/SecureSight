@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Monitor, Radio, Power, Pause, Play, ShieldCheck, UserCheck, 
   UserX, Clock, History, LayoutDashboard, AlertCircle, Eye 
@@ -9,13 +9,22 @@ export default function EndpointsView({
   onSelectEndpoint, 
   onKickEndpoint, 
   onTogglePauseEndpoint,
-  logs = []
+  logs = [],
+  initialViewMode = 'all'
 }) {
-  // Navigation / View modes: 'connected' (default), 'offline', or 'all'
-  const [viewMode, setViewMode] = useState('connected');
+  // Navigation / View modes: 'all' (default), 'connected', or 'offline'
+  const [viewMode, setViewMode] = useState(initialViewMode || 'all');
   const [statusFilter, setStatusFilter] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
+
+  useEffect(() => {
+    if (initialViewMode) {
+      setViewMode(initialViewMode);
+      setStatusFilter('All');
+      setCurrentPage(1);
+    }
+  }, [initialViewMode]);
 
   const isConsentPaused = (ep) => {
     return ep.status === 'Paused' || ep.consent_paused === true || ep.consent_status === 'Paused';
@@ -23,16 +32,16 @@ export default function EndpointsView({
 
   // Connected endpoints are actively alive (Online or Paused)
   const connectedEndpoints = endpoints.filter((ep) => {
-    if (!ep || ep.kicked) return false;
+    if (!ep) return false;
     const s = (ep.status || '').toLowerCase();
     return s === 'online' || s === 'paused' || isConsentPaused(ep);
   });
 
   // Offline / Suspended endpoints: past devices that gave consent but are currently disconnected
   const offlineEndpoints = endpoints.filter((ep) => {
-    if (!ep || ep.kicked) return false;
+    if (!ep) return false;
     const s = (ep.status || '').toLowerCase();
-    return s === 'offline' || s.includes('disconnect') || (!s.includes('online') && !isConsentPaused(ep));
+    return s.includes('offline') || s.includes('disconnect') || s.includes('kicked') || (!s.includes('online') && !isConsentPaused(ep));
   });
 
   // Calculate dynamic fleet metrics
@@ -49,13 +58,13 @@ export default function EndpointsView({
     } else if (viewMode === 'offline') {
       baseList = offlineEndpoints;
     } else {
-      baseList = endpoints.filter(ep => !ep.kicked);
+      baseList = endpoints;
     }
 
     if (statusFilter === 'All') return baseList;
     if (statusFilter === 'Online') return baseList.filter(e => !isConsentPaused(e) && e.status === 'Online');
     if (statusFilter === 'Paused') return baseList.filter(e => isConsentPaused(e));
-    if (statusFilter === 'Offline') return baseList.filter(e => e.status === 'Offline');
+    if (statusFilter === 'Offline') return baseList.filter(e => e.status !== 'Online' && !isConsentPaused(e));
     return baseList;
   })();
 
@@ -203,6 +212,19 @@ export default function EndpointsView({
                 <option value="Paused">Consent Paused ({pausedCount})</option>
               </select>
             )}
+
+            {viewMode === 'all' && (
+              <select
+                value={statusFilter}
+                onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+                className="text-xs font-semibold border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 focus:outline-none cursor-pointer"
+              >
+                <option value="All">All Fleet ({endpoints.length})</option>
+                <option value="Online">Online Only ({onlineCount})</option>
+                <option value="Paused">Consent Paused ({pausedCount})</option>
+                <option value="Offline">Offline / Standby ({offlineCount})</option>
+              </select>
+            )}
           </div>
         </div>
 
@@ -225,7 +247,7 @@ export default function EndpointsView({
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                 {viewMode === 'connected' && 'No active workstation connections detected. Only connected machines currently reporting heartbeat telemetry appear here.'}
                 {viewMode === 'offline' && 'All consented workstations in your fleet are currently active and connected.'}
-                {viewMode === 'all' && 'No workstations have granted consent or enrolled in the monitoring fleet.'}
+                {viewMode === 'all' && 'No workstations match the selected filter.'}
               </p>
             </div>
           </div>
@@ -257,7 +279,7 @@ export default function EndpointsView({
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {paginatedEndpoints.map((ep) => {
                     const paused = isConsentPaused(ep);
-                    const isOffline = ep.status === 'Offline';
+                    const isOffline = !ep.status || ep.status.toLowerCase().includes('offline') || ep.status.toLowerCase().includes('kicked') || (ep.status !== 'Online' && !paused);
                     const epLogs = logs.filter(
                       l => l.endpoint_id === ep.endpoint_id || String(l.endpoint_id) === String(ep.endpoint_id)
                     );

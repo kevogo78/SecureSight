@@ -71,7 +71,7 @@ def list_endpoints():
                 for r in rows:
                     ep_id = r[0]
                     seen_ids.add(ep_id)
-                    is_kicked = ep_id in KICKED_ENDPOINTS or not r[4]
+                    is_kicked = ep_id in KICKED_ENDPOINTS
                     cached_ep = ACTIVE_ENDPOINTS.get(ep_id, {})
                     is_paused = ep_id in PAUSED_ENDPOINTS or cached_ep.get("consent_paused", False)
 
@@ -268,15 +268,4 @@ def disconnect_endpoint(endpoint_id: int):
     if endpoint_id in ACTIVE_ENDPOINTS:
         ACTIVE_ENDPOINTS[endpoint_id]["status"] = "Offline"
         ACTIVE_ENDPOINTS[endpoint_id]["last_seen_time"] = 0
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    UPDATE endpoints 
-                    SET is_active = FALSE 
-                    WHERE endpoint_id = %s;
-                """, (endpoint_id,))
-                conn.commit()
-    except Exception:
-        pass
     return {"status": "disconnected", "endpoint_id": endpoint_id}

@@ -38,6 +38,17 @@ export default function App() {
 
   // Navigation State
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [endpointsViewMode, setEndpointsViewMode] = useState('all');
+
+  const handleNavigate = (tab, subMode = 'all') => {
+    setActiveTab(tab);
+    if (tab === 'endpoints') {
+      setEndpointsViewMode(subMode);
+      if (endpoints.length > 0 && !selectedEndpoint) {
+        setSelectedEndpoint(endpoints[0]);
+      }
+    }
+  };
   
   // Data State - Enforce consent policy: Only real endpoints that granted consent are loaded
   const [endpoints, setEndpoints] = useState(() => {
@@ -193,7 +204,7 @@ export default function App() {
     });
     if (selectedEndpoint && String(selectedEndpoint.endpoint_id) === String(endpointId)) {
       setSelectedEndpoint(null);
-      setActiveTab('endpoints');
+      handleNavigate('endpoints', 'all');
     }
   };
 
@@ -260,12 +271,7 @@ export default function App() {
       {/* ================= SIDEBAR ================= */}
       <Sidebar
         activeTab={activeTab}
-        onTabChange={(tab) => {
-          setActiveTab(tab);
-          if (tab === 'endpoints' && endpoints.length > 0 && !selectedEndpoint) {
-            setSelectedEndpoint(endpoints[0]);
-          }
-        }}
+        onTabChange={(tab) => handleNavigate(tab, 'all')}
         onLogout={handleLogout}
         endpointsCount={endpoints.filter(e => !e.kicked && (e.status === 'Online' || e.status === 'Paused')).length}
       />
@@ -276,8 +282,7 @@ export default function App() {
         <Header
           user={auth}
           onLogout={handleLogout}
-          onNavigate={setActiveTab}
-          logs={logs}
+          onNavigate={handleNavigate}
         />
 
         {/* Scrollable View Area */}
@@ -287,7 +292,7 @@ export default function App() {
               endpoints={endpoints}
               logs={logs}
               onSelectEndpoint={handleSelectEndpoint}
-              onNavigate={setActiveTab}
+              onNavigate={handleNavigate}
               onRefresh={loadTelemetryLogs}
               isRefreshing={isRefreshing}
               onViewScreenshot={setActiveCapture}
@@ -301,13 +306,14 @@ export default function App() {
               onKickEndpoint={handleKickEndpoint}
               onTogglePauseEndpoint={handleTogglePauseEndpoint}
               logs={logs}
+              initialViewMode={endpointsViewMode}
             />
           )}
 
           {activeTab === 'endpoint-detail' && (
             <EndpointDetailView
               endpoint={selectedEndpoint || endpoints[0]}
-              onBack={() => setActiveTab('endpoints')}
+              onBack={() => handleNavigate('endpoints', 'all')}
               logs={logs}
               onViewScreenshot={setActiveCapture}
               onViewRecording={() => setIsRecordingModalOpen(true)}
