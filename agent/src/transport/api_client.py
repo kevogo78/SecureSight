@@ -1,4 +1,41 @@
 import requests
+import re
+from xml.etree import ElementTree
+
+
+def report_s3_error(response):
+    """Report only allowlisted fields; S3 XML may contain signing secrets."""
+    print(f"S3 upload rejected: HTTP {response.status_code}")
+    code = None
+    request_id = response.headers.get("x-amz-request-id", "")
+    body = response.content[:65536]
+    if len(response.content) <= 65536 and b"<!DOCTYPE" not in body.upper():
+        try:
+            root = ElementTree.fromstring(body)
+            fields = {node.tag.rsplit('}', 1)[-1]: node.text or '' for node in root}
+            code = fields.get("Code")
+            request_id = fields.get("RequestId") or request_id
+        except ElementTree.ParseError:
+            pass
+    if code and re.fullmatch(r"[A-Za-z0-9]{1,80}", code):
+        print(f"S3 error code: {code}")
+        hints = {
+            "AccessDenied": "Check the backend signing identity's s3:PutObject permission, bucket policy conditions, and KMS permissions if applicable.",
+            "SignatureDoesNotMatch": "Check the bucket region, PUT method, signed headers, and whether a proxy changed the URL or request.",
+            "ExpiredToken": "Refresh the backend's temporary AWS credentials and request a new upload URL.",
+            "InvalidToken": "Check the backend's temporary AWS credentials, including AWS_SESSION_TOKEN.",
+            "InvalidAccessKeyId": "Check the AWS credentials used by the backend to sign URLs.",
+            "RequestTimeTooSkewed": "Check the signing backend's system clock.",
+            "RequestExpired": "Request a fresh upload URL and check the signing backend's clock.",
+            "AuthorizationQueryParametersError": "Check the signing region and credential configuration.",
+        }
+        if code in hints:
+            print(hints[code])
+    if re.fullmatch(r"[A-Za-z0-9-]{1,128}", request_id):
+        print(f"S3 request ID: {request_id}")
+    region = response.headers.get("x-amz-bucket-region", "")
+    if re.fullmatch(r"[a-z0-9-]{1,40}", region):
+        print(f"S3 bucket region: {region}")
 
 class TelemetryAPIClient:
     def __init__(self, server_url: str):
@@ -24,10 +61,11 @@ class TelemetryAPIClient:
                 presigned_url,
                 data=encrypted_bytes,
                 headers={"Content-Type": "application/octet-stream"},
-                timeout=10
+                timeout=10,
+                allow_redirects=False,
             )
             if res.status_code != 200:
-                print(f"S3 upload rejected: HTTP {res.status_code}")
+                report_s3_error(res)
             return res.status_code == 200
         except requests.exceptions.RequestException as e:
             # Request exceptions can include the signed URL and its credentials.
