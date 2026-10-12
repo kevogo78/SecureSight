@@ -25,6 +25,8 @@ def fetch_recent_logs(limit: int = 50):
                     FROM audit_logs a
                     LEFT JOIN media_captures m ON a.log_id = m.log_id
                     LEFT JOIN endpoints e ON a.endpoint_id = e.endpoint_id
+                    WHERE COALESCE(e.hostname, '') NOT IN ('WORKSTATION-WIN11', 'MACBOOK-PRO-M2')
+                      AND LOWER(COALESCE(e.hostname, '')) NOT LIKE '%ubuntu%'
                     ORDER BY a.timestamp DESC
                     LIMIT %s;
                 """, (limit,))
@@ -55,6 +57,11 @@ def fetch_recent_logs(limit: int = 50):
 
     # If DB has no logs or connection failed, return recent in-memory logs
     if len(IN_MEMORY_AUDIT_LOGS) > 0:
-        return sorted(IN_MEMORY_AUDIT_LOGS, key=lambda x: x["timestamp"], reverse=True)[:limit]
+        filtered_mem = [
+            l for l in IN_MEMORY_AUDIT_LOGS
+            if l.get("hostname") not in ('WORKSTATION-WIN11', 'MACBOOK-PRO-M2')
+            and 'ubuntu' not in (l.get("hostname") or '').lower()
+        ]
+        return sorted(filtered_mem, key=lambda x: x["timestamp"], reverse=True)[:limit]
 
     return results

@@ -170,6 +170,11 @@ class AgentOrchestrator:
     def terminate(self):
         self.timer.stop()
         self.tracker.stop()
+        try:
+            disconnect_url = self.server_url.replace("/telemetry", f"/endpoints/{self.endpoint_id}/disconnect")
+            requests.post(disconnect_url, timeout=2)
+        except Exception:
+            pass
         self.app.quit()
 
 def main():

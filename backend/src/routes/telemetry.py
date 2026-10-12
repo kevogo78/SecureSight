@@ -1,4 +1,5 @@
 import datetime
+import time
 import logging
 from fastapi import APIRouter, HTTPException
 from ..models.schemas import TelemetryPayload, PresignedURLResponse
@@ -35,6 +36,7 @@ def record_telemetry(payload: TelemetryPayload):
 
     status_str = "Paused" if is_paused else "Online"
     ip_val = payload.ip_address or ACTIVE_ENDPOINTS.get(payload.endpoint_id, {}).get("ipAddress") or f"192.168.1.{100 + (payload.endpoint_id % 150)}"
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
 
     ACTIVE_ENDPOINTS[payload.endpoint_id] = {
         "endpoint_id": payload.endpoint_id,
@@ -44,7 +46,8 @@ def record_telemetry(payload: TelemetryPayload):
         "agent_ver": "1.0.0",
         "status": status_str,
         "lastSeen": "Just now",
-        "lastSeenDate": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "lastSeenDate": now_utc.isoformat(),
+        "last_seen_time": time.time(),
         "user": user_name,
         "app": payload.active_app,
         "cpu": payload.cpu_percent,
