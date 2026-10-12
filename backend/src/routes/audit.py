@@ -26,10 +26,10 @@ def fetch_recent_logs(limit: int = 50):
                     LEFT JOIN media_captures m ON a.log_id = m.log_id
                     LEFT JOIN endpoints e ON a.endpoint_id = e.endpoint_id
                     WHERE COALESCE(e.hostname, '') NOT IN ('WORKSTATION-WIN11', 'MACBOOK-PRO-M2')
-                      AND LOWER(COALESCE(e.hostname, '')) NOT LIKE '%ubuntu%'
+                      AND LOWER(COALESCE(e.hostname, '')) NOT LIKE %s
                     ORDER BY a.timestamp DESC
                     LIMIT %s;
-                """, (limit,))
+                """, ('%ubuntu%', limit))
                 rows = cur.fetchall()
 
                 for r in rows:

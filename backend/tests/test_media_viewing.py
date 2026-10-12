@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 # Avoid contacting RDS or AWS during module import.
 with patch("psycopg2.pool.SimpleConnectionPool"), patch("boto3.client"):
-    from src.routes import auth, media
+    from src.routes import auth, media, audit
 
 
 @pytest.fixture
@@ -107,3 +107,22 @@ def test_expired_session_cannot_view_media(setup):
     with patch.object(auth.time, "time", return_value=9999999999):
         assert client.get("/api/v1/media/1/image").status_code == 401
     store.get_object.assert_not_called()
+
+
+def test_audit_query_binds_like_pattern_and_returns_viewer_link():
+    from datetime import datetime, timezone
+    conn = MagicMock()
+    cur = conn.cursor.return_value.__enter__.return_value
+    cur.fetchall.return_value = [(
+        277, 232, datetime.now(timezone.utc), 'notepad.exe', 0, 'Clean', False,
+        'screenshots/232/277.enc', 0, 47, 'Active', 'General', 'KevinB-Test', 'Windows', 43,
+    )]
+    with patch.object(audit, 'get_db_connection') as db:
+        db.return_value.__enter__.return_value = conn
+        rows = audit.fetch_recent_logs(500)
+    query, params = cur.execute.call_args.args
+    assert params == ('%ubuntu%', 500)
+    # Check placeholder arity and catch stray percent-format sequences.
+    query % params
+    assert "NOT LIKE %s" in query
+    assert rows[0]['media_url'] == '/api/v1/media/43/image'

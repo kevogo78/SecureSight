@@ -57,9 +57,18 @@ Deploy the changed backend files from your intended branch into the existing
 EC2 checkout. Keep the S3 signing fix and bucket settings already applied.
 In EC2:
 
+The repository's pinned requirements target the older Python setup tested
+locally with Python 3.11. Do not install them into the working EC2 Python 3.14
+environment: older pydantic-core cannot use the required binary wheels there.
+For this deployment we recorded the live package versions, recreated them in
+an isolated environment using --only-binary=:all:, added cryptography, and
+tested before changing the service. The live environment needed only the
+tested cryptography version (50.0.2 for the verified deployment), not a
+downgrade of FastAPI, Pydantic, or psycopg2. Revalidate versions if the server
+environment changes. Back up code, dependencies, settings, and static files
+before installation or copying. Restart after deploying tested files:
+
 ```bash
-cd /home/ubuntu/ITEC4810_Capstone/backend
-/var/www/endpoint-monitor/venv/bin/python -m pip install -r requirements.txt
 sudo systemctl restart endpoint-api.service
 sudo journalctl -u endpoint-api.service -n 30 --no-pager
 ```
@@ -78,6 +87,43 @@ button. Capture 277 should display if its DB row and S3 object remain present
 and the configured key matches. New captures need no manual IV entry.
 The modal reports pending/missing uploads and authentication/decryption errors.
 The button no longer opens an unrelated sample image when no capture exists.
+
+The audit query must bind the hostname LIKE pattern as a parameter:
+`NOT LIKE %s` with parameters `('%ubuntu%', limit)`. An unescaped literal
+`'%ubuntu%'` alongside psycopg2 parameters caused IndexError and an empty
+fallback response despite real captures being present. This correction is
+covered by the media-viewing regression tests.
+
+## Verified deployment and rollback (October 12, 2026)
+
+Verified on the running two-worker EC2 src.main:app service:
+unauthenticated media requests return 401, login returns 200, authenticated
+media requests return image/jpeg, audit links resolve, and both historical
+and newly uploaded PC screenshots display in the deployed gallery and modal.
+
+The pre-feature backup preserves the working manual-decryption setup:
+`/var/backups/endpoint-monitor/20261012T213858Z-before-dashboard-screenshots`.
+Its archive checksum and critical file list were checked. The restore script
+was syntax checked; a full restore rehearsal was not performed. To roll back,
+coordinate with the group, stop test agents, and run on EC2:
+
+```bash
+sudo bash /var/backups/endpoint-monitor/20261012T213858Z-before-dashboard-screenshots/restore.sh
+```
+
+This restores the backed-up checkout, live virtual environment, static build,
+service environment, and unit file. It does not roll back RDS or S3 data.
+The previous static build also remains at
+`/var/www/endpoint-monitor/dashboard_build.before-screenshots-20261012T222953Z`.
+Keep backups protected because they contain credentials. Coordinate future
+changes: a restore replaces deployed files with the snapshot, including any
+changes made after that snapshot. The service still uses the main checkout;
+deploying files did not merge the feature into the repository's main branch.
+
+Keep test staging until the group is satisfied, then remove it through a
+separate reviewed cleanup. The instance had limited free disk space. Stop the
+foreground port-8001 test process with Ctrl+C when testing is complete; the
+systemd-managed port-8000 backend continues to run independently.
 
 ## Verify
 
