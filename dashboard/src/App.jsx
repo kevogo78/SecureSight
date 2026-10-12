@@ -3,6 +3,7 @@ import LoginPage from './components/LoginPage';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import ScreenshotModal from './components/ScreenshotModal';
+import api from './services/api';
 import AddEndpointModal from './components/AddEndpointModal';
 import SessionPlayerModal from './components/SessionPlayerModal';
 
@@ -186,7 +187,13 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      // Clear the dashboard state even if the backend cannot be reached.
+    }
+    setActiveCapture(null);
     setAuth(null);
     try {
       localStorage.removeItem('edmt_auth');

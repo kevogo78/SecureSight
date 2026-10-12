@@ -1,7 +1,46 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, ExternalLink, ShieldCheck, Calendar, HardDrive, Hash } from 'lucide-react';
 
 export default function ScreenshotModal({ capture, onClose }) {
+  const [imageUrl, setImageUrl] = useState(null);
+  const [imageError, setImageError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setImageUrl(null);
+    setImageError('');
+    setLoading(false);
+    if (!capture?.media_url) return;
+    const controller = new AbortController();
+    let objectUrl;
+    setLoading(true);
+    fetch(capture.media_url, { credentials: 'same-origin', signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          const detail = await response.json().catch(() => ({}));
+          throw new Error(detail.detail || `Screenshot unavailable (HTTP ${response.status})`);
+        }
+        if (!response.headers.get('Content-Type')?.startsWith('image/jpeg')) {
+          throw new Error('The server did not return a decrypted screenshot.');
+        }
+        return response.blob();
+      })
+      .then((blob) => {
+        if (controller.signal.aborted) return;
+        objectUrl = URL.createObjectURL(blob);
+        setImageUrl(objectUrl);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setImageError(error.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [capture]);
   // Close modal when pressing the Escape key
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -48,10 +87,10 @@ export default function ScreenshotModal({ capture, onClose }) {
 
         {/* Modal Body / Image Viewport */}
         <div className="flex-1 overflow-auto p-6 flex flex-col items-center justify-center bg-slate-950/50">
-          {capture.media_url ? (
+          {imageUrl ? (
             <div className="relative group rounded-lg overflow-hidden border border-slate-800 max-h-[55vh]">
               <img
-                src={capture.media_url}
+                src={imageUrl}
                 alt={`Capture for Log ${capture.log_id}`}
                 className="w-full h-auto object-contain max-h-[55vh] rounded"
               />
@@ -61,8 +100,7 @@ export default function ScreenshotModal({ capture, onClose }) {
             </div>
           ) : (
             <div className="text-center py-16 text-slate-500">
-              <p className="text-sm font-medium">No decrypted media buffer available.</p>
-              <p className="text-xs mt-1">Capture may have been redacted or expired by lifecycle policy.</p>
+              <p className="text-sm font-medium">{loading ? 'Loading screenshot…' : imageError || 'No screenshot available for this event.'}</p>
             </div>
           )}
         </div>
@@ -84,14 +122,14 @@ export default function ScreenshotModal({ capture, onClose }) {
             </div>
           </div>
 
-          {capture.media_url && (
+          {imageUrl && (
             <a
-              href={capture.media_url}
+              href={imageUrl}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs transition-colors"
             >
-              <span>Open Raw Presigned Asset</span>
+              <span>Open Screenshot</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           )}

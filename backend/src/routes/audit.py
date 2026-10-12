@@ -2,7 +2,6 @@ import logging
 from fastapi import APIRouter, HTTPException
 from typing import List
 from ..database import get_db_connection
-from ..utils.s3_helper import generate_download_url
 
 logger = logging.getLogger("audit")
 
@@ -21,7 +20,8 @@ def fetch_recent_logs(limit: int = 50):
                            a.keystroke_count, a.filter_status, a.dlp_flag, m.s3_key,
                            a.cpu_percent, a.ram_percent, a.activity_state, a.app_category,
                            COALESCE(e.hostname, 'WORKSTATION-' || a.endpoint_id) as hostname,
-                           COALESCE(e.os_type, 'Windows 11 Enterprise') as os_type
+                           COALESCE(e.os_type, 'Windows 11 Enterprise') as os_type,
+                           m.capture_id
                     FROM audit_logs a
                     LEFT JOIN media_captures m ON a.log_id = m.log_id
                     LEFT JOIN endpoints e ON a.endpoint_id = e.endpoint_id
@@ -33,7 +33,7 @@ def fetch_recent_logs(limit: int = 50):
                 rows = cur.fetchall()
 
                 for r in rows:
-                    media_url = generate_download_url(r[7]) if r[7] else None
+                    media_url = f"/api/v1/media/{r[14]}/image" if r[7] and r[14] else None
                     results.append({
                         "log_id": r[0],
                         "endpoint_id": r[1],
