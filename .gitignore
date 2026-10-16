@@ -230,6 +230,8 @@ env/
 node_modules/
 
 # Secrets & Environment Variables
+.venv311/
+keystrokes_audit.txt
 .env
 *.pem
 *.key

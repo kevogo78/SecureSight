@@ -10,4 +10,4 @@ DB_PASS = os.getenv("DB_PASS", "postgrespassword")
 DB_PORT = os.getenv("DB_PORT", "5432")
 
 S3_BUCKET = os.getenv("S3_BUCKET", "endpoint-monitor-media-captures")
-AWS_REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+AWS_REGION = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1"))

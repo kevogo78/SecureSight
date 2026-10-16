@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import api from '../services/api';
 import { Shield, Lock, User, Eye, EyeOff, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
 
 export default function LoginPage({ onLogin }) {
@@ -8,36 +9,19 @@ export default function LoginPage({ onLogin }) {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-
-    const cleanUser = username.trim().toLowerCase();
-    const cleanPass = password;
-
-    // Requirement: Allow ONLY administrator username with password GGC123ggc123
-    const isValidUser = cleanUser === 'administrator' || cleanUser === 'admin';
-    const isValidPass = cleanPass === 'GGC123ggc123';
-
-    if (!isValidUser || !isValidPass) {
-      setError('Access Denied: Only administrator credentials with authorized password are permitted.');
-      return;
-    }
-
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      const response = await api.post('/auth/login', { username: username.trim(), password });
+      onLogin({ ...response.data, loginTime: new Date().toISOString() });
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Could not sign in. Check the backend connection.');
+    } finally {
       setIsLoading(false);
-      onLogin({
-        username: 'administrator',
-        displayName: 'Administrator',
-        role: 'System Administrator',
-        token: 'auth-jwt-admin-token-' + Date.now(),
-        loginTime: new Date().toISOString()
-      });
-    }, 600);
+    }
   };
-
-
   return (
     <div className="min-h-screen bg-[#07130c] flex flex-col justify-center items-center p-4 relative overflow-hidden font-sans">
       {/* Background Decorative Glow */}
@@ -55,7 +39,7 @@ export default function LoginPage({ onLogin }) {
           </div>
           <h1 className="text-2xl font-black text-white tracking-tight">Endpoint Privacy Monitor</h1>
           <p className="text-xs font-semibold text-emerald-400/90 mt-1 uppercase tracking-wider">
-            ITEC 4810 Capstone • Administrator Portal
+            ITEC 4810 Capstone â€¢ Administrator Portal
           </p>
           <p className="text-xs text-slate-400 mt-2">
             Sign in with authorized administrator credentials to manage fleet endpoints and review privacy telemetry.
@@ -138,7 +122,7 @@ export default function LoginPage({ onLogin }) {
         {/* Security Notice */}
         <div className="mt-6 pt-5 border-t border-slate-800 text-center">
           <p className="text-[11px] text-slate-500">
-            Protected endpoint gateway • Role-Based Access Control enforced
+            Protected endpoint gateway â€¢ Role-Based Access Control enforced
           </p>
         </div>
       </div>

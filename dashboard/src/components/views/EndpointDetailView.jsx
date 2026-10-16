@@ -112,7 +112,7 @@ export default function EndpointDetailView({
                     ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
                     : 'text-slate-600 bg-slate-100'
               }`}>
-                {(endpoint.status === 'Paused' || endpoint.consent_paused) ? '⏸ Consent Paused' : `● ${endpoint.status}`}
+                {(endpoint.status === 'Paused' || endpoint.consent_paused) ? 'â¸ Consent Paused' : `â— ${endpoint.status}`}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-6 text-xs text-slate-500 mt-2">
@@ -127,7 +127,8 @@ export default function EndpointDetailView({
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => onViewScreenshot(endpointLogs.find(l => l.media_url) || { log_id: 103, endpoint_id: endpoint.endpoint_id, active_app: activeApp, media_url: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1200&q=80', timestamp: new Date().toISOString() })}
+            disabled={!endpointLogs.some(l => l.media_url)}
+              onClick={() => onViewScreenshot(endpointLogs.find(l => l.media_url))}
             className="px-3.5 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
           >
             <Camera className="w-4 h-4" />
@@ -474,7 +475,7 @@ export default function EndpointDetailView({
               </div>
             </div>
             <button onClick={onViewRecording} className="text-emerald-700 font-bold hover:underline cursor-pointer">
-              Launch Session Player →
+              Launch Session Player â†’
             </button>
           </div>
 

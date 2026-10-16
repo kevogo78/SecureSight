@@ -13,35 +13,11 @@ export default function AddEndpointModal({ isOpen, onClose, onAddEndpoint }) {
     e.preventDefault();
     if (!hostname.trim() || !userName.trim()) return;
 
-    let iconType = 'win';
-    if (osType.toLowerCase().includes('mac')) iconType = 'mac';
-    if (osType.toLowerCase().includes('linux')) iconType = 'linux';
-
-    const newEndpoint = {
-      endpoint_id: Date.now(),
-      name: hostname.trim().toUpperCase(),
-      user: userName.trim(),
-      os: osType,
-      osType: iconType,
-      agent_ver: '1.0.0',
-      status: 'Online',
-      lastSeen: 'Just now',
-      lastSeenDate: new Date().toISOString(),
-      ipAddress: `192.168.1.${Math.floor(Math.random() * 150) + 50}`,
-      uptime: '12 minutes',
-      cpu: Math.round(Math.random() * 20 + 5),
-      ram: Math.round(Math.random() * 30 + 20),
-      disk: Math.round(Math.random() * 40 + 20),
-      network: '10 Mbps',
-      app: 'AgentOrchestrator.exe',
-      category: 'Agent System'
-    };
-
-    onAddEndpoint(newEndpoint);
+    onAddEndpoint();
     onClose();
   };
 
-  const agentCommand = `python -m pip install -r agent\\Requirements.txt; python agent\\src\\main.py --endpoint-id "${hostname || 'NEW-ENDPOINT'}"`;
+  const agentCommand = 'py -m pip install -r agent\\requirements.txt; py agent\\run_agent.py';
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(agentCommand);
@@ -62,7 +38,7 @@ export default function AddEndpointModal({ isOpen, onClose, onAddEndpoint }) {
             </div>
             <div>
               <h3 className="text-base font-bold text-white">Enroll New Endpoint</h3>
-              <p className="text-xs text-slate-400">Register a client workstation into the observability fleet</p>
+              <p className="text-xs text-slate-400">Run the agent on the device and grant consent to connect it</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition">

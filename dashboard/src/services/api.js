@@ -136,7 +136,7 @@ export const fetchEndpoints = async () => {
   } catch (error) {
     console.warn('Backend /endpoints unreachable:', error.message);
   }
-  return getConsentedEndpoints();
+  return [];
 };
 
 export const getAuditLogs = async (limit = 100) => {
