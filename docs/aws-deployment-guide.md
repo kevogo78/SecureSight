@@ -158,7 +158,14 @@ DB_PORT=5432
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=<YOUR_AWS_ACCESS_KEY_ID>
 AWS_SECRET_ACCESS_KEY=<YOUR_AWS_SECRET_ACCESS_KEY>
-S3_BUCKET_NAME=<YOUR_S3_BUCKET_NAME>
+S3_BUCKET=<YOUR_S3_BUCKET_NAME>
+
+# Dashboard Administrator Authentication & Decryption
+DASHBOARD_ADMIN_USER=administrator
+DASHBOARD_ADMIN_PASSWORD=<YOUR_ADMIN_PASSWORD>
+DASHBOARD_SESSION_SECRET=<YOUR_RANDOM_SECRET_AT_LEAST_32_CHARS>
+DASHBOARD_COOKIE_SECURE=false
+SCREENSHOT_KEY_HEX=<YOUR_64_HEX_CHAR_ENCRYPTION_KEY>
 
 # Application Security
 SECRET_KEY=<YOUR_RANDOM_SESSION_SECRET_KEY>
@@ -251,7 +258,7 @@ server {
 
     # Reverse proxy for FastAPI Ingestion Engine
     location /api/ {
-        proxy_pass http://127.0.0.1:8000;
+        proxy_pass http://127.0.0.1:8000/api/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -262,7 +269,34 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Single Page Application (SPA) fallback routing
+    # Reverse proxy for Backend Health Check
+    location /health {
+        proxy_pass http://127.0.0.1:8000/health;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Reverse proxy for Swagger / OpenAPI Documentation
+    location /docs {
+        proxy_pass http://127.0.0.1:8000/docs;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /openapi.json {
+        proxy_pass http://127.0.0.1:8000/openapi.json;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
     location / {
         try_files $uri $uri/ /index.html;
     }

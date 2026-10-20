@@ -117,6 +117,10 @@ def record_telemetry(payload: TelemetryPayload):
                         valid_user_id = user_row[0] if user_row else 1
                 except Exception as ue:
                     logger.warning(f"Could not query/provision default user: {ue}")
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
                     valid_user_id = 1
 
                 # 2. Ensure endpoint exists in endpoints table to satisfy foreign key

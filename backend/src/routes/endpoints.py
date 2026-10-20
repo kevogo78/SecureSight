@@ -296,6 +296,10 @@ def register_endpoint(ep: EndpointRegistration):
                         valid_user_id = user_row[0] if user_row else 1
                 except Exception as ue:
                     logger.warning(f"Could not query/provision default user: {ue}")
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
 
                 cur.execute("""
                     INSERT INTO endpoints (

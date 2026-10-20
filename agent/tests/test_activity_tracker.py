@@ -254,8 +254,9 @@ def test_set_keystrokes_enabled_toggles_and_syncs(tmp_path):
         assert tracker._keyboard_listener is None
 
         # Toggle back on
+        mock_listener_cls = MagicMock()
         with patch("src.core.activity_tracker.HAS_PYNPUT", True), \
-             patch("src.core.activity_tracker.keyboard.Listener") as mock_listener_cls:
+             patch("src.core.activity_tracker.keyboard.Listener", mock_listener_cls, create=True):
             tracker.set_keystrokes_enabled(True)
             assert tracker.enable_keystrokes is True
             mock_listener_cls.assert_called_once()

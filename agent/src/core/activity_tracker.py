@@ -23,6 +23,15 @@ try:
     from pynput import keyboard
     HAS_PYNPUT = True
 except (ImportError, Exception):
+    class _MockKeyboard:
+        class Listener:
+            def __init__(self, *args, **kwargs):
+                self.daemon = False
+            def start(self):
+                pass
+            def stop(self):
+                pass
+    keyboard = _MockKeyboard()
     HAS_PYNPUT = False
 
 # Import Privacy Filter (Task 6)
