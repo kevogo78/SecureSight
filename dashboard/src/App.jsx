@@ -5,7 +5,6 @@ import Header from './components/Header';
 import ScreenshotModal from './components/ScreenshotModal';
 import api from './services/api';
 import AddEndpointModal from './components/AddEndpointModal';
-import SessionPlayerModal from './components/SessionPlayerModal';
 
 import FleetOverviewView from './components/views/FleetOverviewView';
 import EndpointsView from './components/views/EndpointsView';
@@ -23,6 +22,8 @@ import {
   kickEndpointApi,
   pauseEndpointApi,
   resumeEndpointApi,
+  updateEndpointApi,
+  deleteEndpointApi,
   INITIAL_LOGS 
 } from './services/api';
 
@@ -66,7 +67,6 @@ export default function App() {
   // Modals
   const [activeCapture, setActiveCapture] = useState(null);
   const [isAddEndpointOpen, setIsAddEndpointOpen] = useState(false);
-  const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
 
   // Polling loop: fetch endpoints and telemetry logs every 5 seconds when authenticated
   useEffect(() => {
@@ -246,6 +246,59 @@ export default function App() {
     }
   };
 
+  const handleUpdateEndpoint = async (endpointId, updatedData) => {
+    try {
+      await updateEndpointApi(endpointId, updatedData);
+    } catch (e) {
+      console.warn('API update failed, applying locally:', e);
+    }
+    setEndpoints((prev) => {
+      const updated = prev.map(ep => {
+        if (String(ep.endpoint_id) === String(endpointId)) {
+          const newName = updatedData.display_name || updatedData.custom_name || ep.name;
+          return {
+            ...ep,
+            name: newName,
+            custom_name: newName,
+            mac_address: updatedData.mac_address || ep.mac_address,
+            device_fingerprint: updatedData.device_fingerprint || ep.device_fingerprint,
+            user: updatedData.user || ep.user
+          };
+        }
+        return ep;
+      });
+      saveConsentedEndpoints(updated);
+      return updated;
+    });
+
+    if (selectedEndpoint && String(selectedEndpoint.endpoint_id) === String(endpointId)) {
+      setSelectedEndpoint(prev => ({
+        ...prev,
+        name: updatedData.display_name || updatedData.custom_name || prev.name,
+        custom_name: updatedData.display_name || updatedData.custom_name || prev.custom_name,
+        mac_address: updatedData.mac_address || prev.mac_address,
+        device_fingerprint: updatedData.device_fingerprint || prev.device_fingerprint,
+        user: updatedData.user || prev.user
+      }));
+    }
+  };
+
+  const handleDeleteEndpoint = async (endpointId) => {
+    try {
+      await deleteEndpointApi(endpointId);
+    } catch (e) {
+      console.warn('API delete failed, removing locally:', e);
+    }
+    setEndpoints((prev) => {
+      const remaining = prev.filter(ep => String(ep.endpoint_id) !== String(endpointId));
+      saveConsentedEndpoints(remaining);
+      return remaining;
+    });
+    if (selectedEndpoint && String(selectedEndpoint.endpoint_id) === String(endpointId)) {
+      setSelectedEndpoint(null);
+    }
+  };
+
   const handleAddEndpoint = (newEp) => {
     const consentedEp = {
       ...newEp,
@@ -311,6 +364,8 @@ export default function App() {
               onSelectEndpoint={handleSelectEndpoint}
               onKickEndpoint={handleKickEndpoint}
               onTogglePauseEndpoint={handleTogglePauseEndpoint}
+              onUpdateEndpoint={handleUpdateEndpoint}
+              onDeleteEndpoint={handleDeleteEndpoint}
               logs={logs}
               initialViewMode={endpointsViewMode}
             />
@@ -322,7 +377,6 @@ export default function App() {
               onBack={() => handleNavigate('endpoints', 'all')}
               logs={logs}
               onViewScreenshot={setActiveCapture}
-              onViewRecording={() => setIsRecordingModalOpen(true)}
               onKickEndpoint={handleKickEndpoint}
             />
           )}
@@ -362,13 +416,6 @@ export default function App() {
         isOpen={isAddEndpointOpen}
         onClose={() => setIsAddEndpointOpen(false)}
         onAddEndpoint={handleAddEndpoint}
-      />
-
-      {/* 3. Encrypted Session Screen Stream Player Modal */}
-      <SessionPlayerModal
-        isOpen={isRecordingModalOpen}
-        onClose={() => setIsRecordingModalOpen(false)}
-        endpointName={selectedEndpoint?.name || 'WORKSTATION-WIN11'}
       />
     </div>
   );

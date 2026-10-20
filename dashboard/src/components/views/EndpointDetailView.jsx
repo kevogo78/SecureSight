@@ -15,33 +15,21 @@ export default function EndpointDetailView({
   onBack, 
   logs = [], 
   onViewScreenshot, 
-  onViewRecording,
   onKickEndpoint
 }) {
-  const [activeSubTab, setActiveSubTab] = useState('activity'); // 'activity', 'applications', 'websites', 'keylogs', 'screenshots', 'system'
+  const [activeSubTab, setActiveSubTab] = useState('activity'); // 'activity', 'applications', 'timeline', 'keylogs', 'screenshots', 'system'
 
-  // Interactive Keystroke and Session Recording Toggles
+  // Interactive Keystroke Audit Toggle
   const [captureKeysToFile, setCaptureKeysToFile] = useState(() => {
     try { return localStorage.getItem('edmt_capture_keys_to_file') === 'true'; } catch { return true; }
   });
   const [keylogFilePath, setKeylogFilePath] = useState(() => {
-    try { return localStorage.getItem('edmt_keylog_path') || 'agent/keystrokes_audit.txt'; } catch { return 'agent/keystrokes_audit.txt'; }
-  });
-  const [recordSession, setRecordSession] = useState(() => {
-    try { return localStorage.getItem('edmt_record_session') !== 'false'; } catch { return true; }
-  });
-  const [recordingQuality, setRecordingQuality] = useState(() => {
-    try { return localStorage.getItem('edmt_recording_quality') || '720p @ 1 FPS (Free Tier Safe)'; } catch { return '720p @ 1 FPS (Free Tier Safe)'; }
+    try { return localStorage.getItem('edmt_keylog_path') || 'agent/keystroke_audit.txt'; } catch { return 'agent/keystroke_audit.txt'; }
   });
 
   const handleToggleKeystrokes = (val) => {
     setCaptureKeysToFile(val);
     try { localStorage.setItem('edmt_capture_keys_to_file', String(val)); } catch (e) {}
-  };
-
-  const handleToggleRecording = (val) => {
-    setRecordSession(val);
-    try { localStorage.setItem('edmt_record_session', String(val)); } catch (e) {}
   };
 
   if (!endpoint) return null;
@@ -133,13 +121,6 @@ export default function EndpointDetailView({
           >
             <Camera className="w-4 h-4" />
             <span>Latest Capture</span>
-          </button>
-          <button
-            onClick={onViewRecording}
-            className="px-3.5 py-2 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
-          >
-            <Video className="w-4 h-4" />
-            <span>Session Stream</span>
           </button>
           <button
             onClick={() => {
@@ -334,10 +315,10 @@ export default function EndpointDetailView({
             <div>
               <h4 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <Key className="w-5 h-5 text-emerald-600" />
-                <span>Cybersecurity Keystroke &amp; Session Audit Controls</span>
+                <span>Cybersecurity Keystroke Audit Controls</span>
               </h4>
               <p className="text-xs text-slate-500 mt-0.5">
-                Configure hardware key event capture and encrypted session streaming for this endpoint.
+                Configure hardware key event capture and diagnostic audit logging for this endpoint.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -347,17 +328,11 @@ export default function EndpointDetailView({
                 <span className={`w-2 h-2 rounded-full ${captureKeysToFile ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
                 {captureKeysToFile ? 'Keystrokes: ACTIVE' : 'Keystrokes: PAUSED'}
               </span>
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-                recordSession ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-slate-100 text-slate-600'
-              }`}>
-                <span className={`w-2 h-2 rounded-full ${recordSession ? 'bg-blue-500 animate-pulse' : 'bg-slate-400'}`} />
-                {recordSession ? 'Session Stream: ON' : 'Session Stream: OFF'}
-              </span>
             </div>
           </div>
 
           {/* Interactive Toggle Control Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             {/* Toggle 1: Keystroke Capture */}
             <div className={`p-4 rounded-xl border transition ${
               captureKeysToFile ? 'bg-emerald-50/40 border-emerald-300' : 'bg-slate-50 border-slate-200'
@@ -378,33 +353,12 @@ export default function EndpointDetailView({
                 </label>
               </div>
               <div className="mt-3 pt-2.5 border-t border-slate-200/60 text-[11px] font-mono flex items-center justify-between text-slate-600">
-                <span>Audit File Destination:</span>
+                <span>Local Audit Buffer:</span>
                 <code className="bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-800 font-bold">{keylogFilePath}</code>
               </div>
-            </div>
-
-            {/* Toggle 2: Session Screen Recording */}
-            <div className={`p-4 rounded-xl border transition ${
-              recordSession ? 'bg-blue-50/40 border-blue-300' : 'bg-slate-50 border-slate-200'
-            }`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-bold text-slate-900">Session Screen Recording</div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">Streams periodic encrypted frames to AWS S3 storage</div>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={recordSession}
-                    onChange={(e) => handleToggleRecording(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
-              <div className="mt-3 pt-2.5 border-t border-slate-200/60 text-[11px] flex items-center justify-between text-slate-600">
-                <span>Capture Specification:</span>
-                <span className="font-semibold text-slate-800">{recordingQuality}</span>
+              <div className="mt-2 text-[11px] font-mono flex items-center justify-between text-slate-600">
+                <span>S3 Sync Target (On Toggle Off):</span>
+                <code className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200 font-bold">s3://$&#123;S3_BUCKET_NAME&#125;/keystroke_audit/keystroke_audit.txt</code>
               </div>
             </div>
           </div>
@@ -456,27 +410,6 @@ export default function EndpointDetailView({
           <div className="flex items-center justify-between">
             <h4 className="font-bold text-sm text-slate-900">Encrypted Screen Capture Gallery</h4>
             <span className="text-xs text-slate-500">Stored in AWS S3 with AES-256 Server-Side Encryption</span>
-          </div>
-
-          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-3">
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={recordSession}
-                  onChange={(e) => handleToggleRecording(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-              </label>
-              <div className="flex items-center gap-2 text-slate-700">
-                <Video className="w-4 h-4 text-emerald-600" />
-                <span>Session Video Stream: <strong className={recordSession ? 'text-emerald-700' : 'text-slate-500'}>{recordSession ? 'ENABLED' : 'PAUSED'}</strong> ({recordingQuality})</span>
-              </div>
-            </div>
-            <button onClick={onViewRecording} className="text-emerald-700 font-bold hover:underline cursor-pointer">
-              Launch Session Player â†’
-            </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-2">

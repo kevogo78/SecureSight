@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from typing import List, Optional
 from pydantic import BaseModel
 from ..database import get_db_connection
+from ..models.schemas import EndpointUpdate
 
 logger = logging.getLogger("endpoints")
 
@@ -26,22 +27,82 @@ def format_relative_time(seconds_ago: float) -> str:
     else:
         return f"{int(seconds_ago // 86400)}d ago"
 
-# In-memory storage for active endpoints, kicked endpoint IDs, and paused consent IDs
+# In-memory storage for active endpoints, kicked endpoint IDs, paused consent IDs, and connection history
 ACTIVE_ENDPOINTS = {}
 KICKED_ENDPOINTS = set()
 PAUSED_ENDPOINTS = set()
+IN_MEMORY_CONNECTION_HISTORY = []
+_SCHEMA_MIGRATION_CHECKED = False
+
+def ensure_schema_migration():
+    """Idempotently executes database migrations for persistent hardware tracking."""
+    global _SCHEMA_MIGRATION_CHECKED
+    if _SCHEMA_MIGRATION_CHECKED:
+        return
+    _SCHEMA_MIGRATION_CHECKED = True
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    ALTER TABLE endpoints ADD COLUMN IF NOT EXISTS custom_name VARCHAR(100);
+                    ALTER TABLE endpoints ADD COLUMN IF NOT EXISTS mac_address VARCHAR(50);
+                    ALTER TABLE endpoints ADD COLUMN IF NOT EXISTS device_fingerprint VARCHAR(100);
+                    CREATE TABLE IF NOT EXISTS endpoint_connection_history (
+                        connection_id BIGSERIAL PRIMARY KEY,
+                        endpoint_id INT REFERENCES endpoints(endpoint_id) ON DELETE CASCADE,
+                        device_fingerprint VARCHAR(100),
+                        mac_address VARCHAR(50),
+                        user_id INT REFERENCES users(user_id) ON DELETE SET NULL,
+                        username VARCHAR(100),
+                        ip_address VARCHAR(50),
+                        hostname VARCHAR(100),
+                        connected_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                        last_seen TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                        status VARCHAR(20) DEFAULT 'Online'
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_endpoints_device_fingerprint ON endpoints(device_fingerprint);
+                    CREATE INDEX IF NOT EXISTS idx_endpoints_mac_address ON endpoints(mac_address);
+                    CREATE INDEX IF NOT EXISTS idx_conn_hist_fingerprint ON endpoint_connection_history(device_fingerprint);
+                    CREATE INDEX IF NOT EXISTS idx_conn_hist_mac ON endpoint_connection_history(mac_address);
+                    CREATE INDEX IF NOT EXISTS idx_conn_hist_endpoint ON endpoint_connection_history(endpoint_id);
+                    ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS website_url VARCHAR(255);
+                    CREATE INDEX IF NOT EXISTS idx_audit_logs_website_url ON audit_logs(website_url);
+                    CREATE TABLE IF NOT EXISTS privacy_rules (
+                        rule_id VARCHAR(50) PRIMARY KEY,
+                        name VARCHAR(100) NOT NULL,
+                        category VARCHAR(30) NOT NULL,
+                        pattern TEXT NOT NULL,
+                        replacement VARCHAR(100) DEFAULT '[REDACTED]',
+                        action VARCHAR(30) DEFAULT 'mask_and_block',
+                        reason VARCHAR(50) NOT NULL,
+                        enabled BOOLEAN DEFAULT TRUE,
+                        is_builtin BOOLEAN DEFAULT FALSE,
+                        description TEXT,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_privacy_rules_category ON privacy_rules(category);
+                    CREATE INDEX IF NOT EXISTS idx_privacy_rules_enabled ON privacy_rules(enabled);
+                """)
+                conn.commit()
+    except Exception as e:
+        logger.debug(f"Schema check deferred or error: {e}")
 
 class EndpointRegistration(BaseModel):
     endpoint_id: int
     hostname: str
+    custom_name: Optional[str] = None
     os_type: str = "Windows 11 Enterprise"
     user: str = "Authorized User"
     agent_ver: str = "1.0.0"
     ip_address: Optional[str] = None
+    mac_address: Optional[str] = None
+    device_fingerprint: Optional[str] = None
 
 @router.get("")
 def list_endpoints():
-    """Returns monitored endpoints with live heartbeat status and connection history."""
+    """Returns monitored endpoints with live heartbeat status, MAC address, and device fingerprint."""
+    ensure_schema_migration()
     results = []
     seen_ids = set()
     now_utc = datetime.datetime.now(datetime.timezone.utc)
@@ -53,7 +114,8 @@ def list_endpoints():
                 cur.execute("""
                     SELECT e.endpoint_id, e.hostname, e.os_type, e.agent_ver, e.is_active, e.last_seen,
                            COALESCE(u.username, 'Authorized User') as user,
-                           latest.active_app, latest.cpu_percent, latest.ram_percent
+                           latest.active_app, latest.cpu_percent, latest.ram_percent,
+                           e.custom_name, e.mac_address, e.device_fingerprint, e.user_id
                     FROM endpoints e
                     LEFT JOIN users u ON e.user_id = u.user_id
                     LEFT JOIN LATERAL (
@@ -95,9 +157,19 @@ def list_endpoints():
                         calc_status = "Online"
 
                     ip_val = cached_ep.get("ipAddress") or cached_ep.get("ip_address") or f"192.168.1.{100 + (ep_id % 150)}"
+                    custom_name = r[10] or cached_ep.get("custom_name")
+                    display_name = custom_name or cached_ep.get("display_name") or r[1]
+                    mac_val = r[11] or cached_ep.get("mac_address") or f"02:00:00:00:00:{ep_id:02x}"
+                    fp_val = r[12] or cached_ep.get("device_fingerprint") or f"fp_{ep_id}"
+
                     results.append({
                         "endpoint_id": ep_id,
-                        "name": r[1],
+                        "name": display_name,
+                        "hostname": r[1],
+                        "custom_name": custom_name,
+                        "mac_address": mac_val,
+                        "device_fingerprint": fp_val,
+                        "user_id": r[13],
                         "os": r[2],
                         "osType": "mac" if "mac" in (r[2] or "").lower() else "win",
                         "agent_ver": r[3],
@@ -138,6 +210,8 @@ def list_endpoints():
                 calc_status = "Online"
 
             ip_val = ep.get("ipAddress") or ep.get("ip_address") or f"192.168.1.{100 + (ep_id % 150)}"
+            mac_val = ep.get("mac_address") or f"02:00:00:00:00:{ep_id:02x}"
+            fp_val = ep.get("device_fingerprint") or f"fp_{ep_id}"
             results.append({
                 **ep,
                 "status": calc_status,
@@ -145,18 +219,28 @@ def list_endpoints():
                 "kicked": is_kicked,
                 "consent_paused": is_paused,
                 "ipAddress": ip_val,
-                "ip_address": ip_val
+                "ip_address": ip_val,
+                "mac_address": mac_val,
+                "device_fingerprint": fp_val
             })
     return results
 
 @router.post("/register")
 def register_endpoint(ep: EndpointRegistration):
-    """Registers an endpoint upon consent authorization."""
+    """Registers an endpoint upon consent authorization and logs initial device connection."""
+    ensure_schema_migration()
     ip_val = ep.ip_address or f"192.168.1.{100 + (ep.endpoint_id % 150)}"
+    mac_val = ep.mac_address or f"02:00:00:00:00:{ep.endpoint_id:02x}"
+    fp_val = ep.device_fingerprint or f"fp_{ep.endpoint_id}"
     now_utc = datetime.datetime.now(datetime.timezone.utc)
+
     ACTIVE_ENDPOINTS[ep.endpoint_id] = {
         "endpoint_id": ep.endpoint_id,
-        "name": ep.hostname,
+        "name": ep.custom_name or ep.hostname,
+        "hostname": ep.hostname,
+        "custom_name": ep.custom_name,
+        "mac_address": mac_val,
+        "device_fingerprint": fp_val,
         "os": ep.os_type,
         "osType": "mac" if "mac" in ep.os_type.lower() else "win",
         "agent_ver": ep.agent_ver,
@@ -176,11 +260,26 @@ def register_endpoint(ep: EndpointRegistration):
     # Unkick if re-authorized
     KICKED_ENDPOINTS.discard(ep.endpoint_id)
 
+    # In-memory history tracking
+    conn_entry = {
+        "connection_id": len(IN_MEMORY_CONNECTION_HISTORY) + 1,
+        "endpoint_id": ep.endpoint_id,
+        "device_fingerprint": fp_val,
+        "mac_address": mac_val,
+        "user_id": 1,
+        "username": ep.user,
+        "ip_address": ip_val,
+        "hostname": ep.hostname,
+        "connected_at": now_utc.isoformat(),
+        "last_seen": now_utc.isoformat(),
+        "status": "Online"
+    }
+    IN_MEMORY_CONNECTION_HISTORY.insert(0, conn_entry)
+
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # 1. Resolve a valid user_id to satisfy foreign key (auto-create admin if empty)
-                valid_user_id = None
+                valid_user_id = 1
                 try:
                     cur.execute("SELECT user_id FROM users LIMIT 1;")
                     user_row = cur.fetchone()
@@ -197,22 +296,220 @@ def register_endpoint(ep: EndpointRegistration):
                         valid_user_id = user_row[0] if user_row else 1
                 except Exception as ue:
                     logger.warning(f"Could not query/provision default user: {ue}")
-                    valid_user_id = 1
 
                 cur.execute("""
-                    INSERT INTO endpoints (endpoint_id, user_id, hostname, os_type, agent_ver, is_active, last_seen)
-                    VALUES (%s, %s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP)
+                    INSERT INTO endpoints (
+                        endpoint_id, user_id, hostname, custom_name, mac_address, device_fingerprint, os_type, agent_ver, is_active, last_seen
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP)
                     ON CONFLICT (endpoint_id) DO UPDATE SET 
                         hostname = EXCLUDED.hostname,
+                        custom_name = COALESCE(EXCLUDED.custom_name, endpoints.custom_name),
+                        mac_address = COALESCE(EXCLUDED.mac_address, endpoints.mac_address),
+                        device_fingerprint = COALESCE(EXCLUDED.device_fingerprint, endpoints.device_fingerprint),
                         os_type = EXCLUDED.os_type,
                         is_active = TRUE,
                         last_seen = CURRENT_TIMESTAMP;
-                """, (ep.endpoint_id, valid_user_id, ep.hostname, ep.os_type, ep.agent_ver))
+                """, (ep.endpoint_id, valid_user_id, ep.hostname, ep.custom_name, mac_val, fp_val, ep.os_type, ep.agent_ver))
+
+                cur.execute("""
+                    INSERT INTO endpoint_connection_history (
+                        endpoint_id, device_fingerprint, mac_address, user_id, username, ip_address, hostname, connected_at, last_seen, status
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'Online');
+                """, (ep.endpoint_id, fp_val, mac_val, valid_user_id, ep.user, ip_val, ep.hostname))
+
                 conn.commit()
     except Exception as e:
         logger.error(f"[!] Database register_endpoint error: {e}", exc_info=True)
 
     return {"status": "registered", "endpoint_id": ep.endpoint_id}
+
+@router.get("/{endpoint_id}/history")
+def get_endpoint_history(endpoint_id: int):
+    """
+    Returns connection history for this physical device.
+    Past logins from the same physical device link together by MAC address or persistent device fingerprint.
+    """
+    ensure_schema_migration()
+    history = []
+    mac_val = None
+    fp_val = None
+
+    # Retrieve known hardware identifiers
+    if endpoint_id in ACTIVE_ENDPOINTS:
+        mac_val = ACTIVE_ENDPOINTS[endpoint_id].get("mac_address")
+        fp_val = ACTIVE_ENDPOINTS[endpoint_id].get("device_fingerprint")
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                if not mac_val or not fp_val:
+                    cur.execute("SELECT mac_address, device_fingerprint FROM endpoints WHERE endpoint_id = %s;", (endpoint_id,))
+                    row = cur.fetchone()
+                    if row:
+                        mac_val = row[0] or mac_val
+                        fp_val = row[1] or fp_val
+
+                # Query all sessions from the same physical device linked by MAC, fingerprint, or endpoint ID
+                cur.execute("""
+                    SELECT connection_id, endpoint_id, device_fingerprint, mac_address,
+                           user_id, username, ip_address, hostname, connected_at, last_seen, status
+                    FROM endpoint_connection_history
+                    WHERE endpoint_id = %s 
+                       OR (device_fingerprint IS NOT NULL AND device_fingerprint = %s)
+                       OR (mac_address IS NOT NULL AND mac_address = %s)
+                    ORDER BY connected_at DESC
+                    LIMIT 50;
+                """, (endpoint_id, fp_val or "__NONE__", mac_val or "__NONE__"))
+                rows = cur.fetchall()
+                for r in rows:
+                    history.append({
+                        "connection_id": r[0],
+                        "endpoint_id": r[1],
+                        "device_fingerprint": r[2],
+                        "mac_address": r[3],
+                        "user_id": r[4],
+                        "username": r[5] or "Authorized User",
+                        "ip_address": r[6],
+                        "hostname": r[7],
+                        "connected_at": r[8].isoformat() if r[8] else None,
+                        "last_seen": r[9].isoformat() if r[9] else None,
+                        "status": r[10] or "Online"
+                    })
+    except Exception as e:
+        logger.warning(f"Database get_endpoint_history query notice: {e}")
+
+    # Fallback to in-memory history matching endpoint_id or hardware fingerprint
+    if not history and IN_MEMORY_CONNECTION_HISTORY:
+        matched = [
+            h for h in IN_MEMORY_CONNECTION_HISTORY
+            if h.get("endpoint_id") == endpoint_id 
+            or (fp_val and h.get("device_fingerprint") == fp_val)
+            or (mac_val and h.get("mac_address") == mac_val)
+        ]
+        history.extend(matched)
+
+    # If still empty, provide current session record
+    if not history and endpoint_id in ACTIVE_ENDPOINTS:
+        ep = ACTIVE_ENDPOINTS[endpoint_id]
+        history.append({
+            "connection_id": 1,
+            "endpoint_id": endpoint_id,
+            "device_fingerprint": ep.get("device_fingerprint") or f"fp_{endpoint_id}",
+            "mac_address": ep.get("mac_address") or f"02:00:00:00:00:{endpoint_id:02x}",
+            "user_id": 1,
+            "username": ep.get("user") or "Authorized User",
+            "ip_address": ep.get("ipAddress") or "192.168.1.100",
+            "hostname": ep.get("hostname") or ep.get("name"),
+            "connected_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "last_seen": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "status": ep.get("status") or "Online"
+        })
+
+    return history
+
+@router.put("/{endpoint_id}")
+def update_endpoint(endpoint_id: int, payload: EndpointUpdate):
+    """
+    Updates endpoint display name, MAC address, device fingerprint, or assigned user.
+    Enables manually linking / re-linking device identifiers.
+    """
+    ensure_schema_migration()
+    new_name = payload.display_name or payload.custom_name
+    mac = payload.mac_address
+    fingerprint = payload.device_fingerprint
+    user_name = payload.user
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Update endpoints table
+                cur.execute("""
+                    UPDATE endpoints
+                    SET custom_name = COALESCE(%s, custom_name),
+                        mac_address = COALESCE(%s, mac_address),
+                        device_fingerprint = COALESCE(%s, device_fingerprint)
+                    WHERE endpoint_id = %s;
+                """, (new_name, mac, fingerprint, endpoint_id))
+
+                # Re-link connection history entries for this endpoint
+                if mac or fingerprint:
+                    cur.execute("""
+                        UPDATE endpoint_connection_history
+                        SET mac_address = COALESCE(%s, mac_address),
+                            device_fingerprint = COALESCE(%s, device_fingerprint)
+                        WHERE endpoint_id = %s;
+                    """, (mac, fingerprint, endpoint_id))
+                conn.commit()
+    except Exception as e:
+        logger.warning(f"Database update_endpoint error: {e}")
+
+    # Update in-memory ACTIVE_ENDPOINTS
+    if endpoint_id in ACTIVE_ENDPOINTS:
+        if new_name:
+            ACTIVE_ENDPOINTS[endpoint_id]["custom_name"] = new_name
+            ACTIVE_ENDPOINTS[endpoint_id]["name"] = new_name
+        if mac:
+            ACTIVE_ENDPOINTS[endpoint_id]["mac_address"] = mac
+        if fingerprint:
+            ACTIVE_ENDPOINTS[endpoint_id]["device_fingerprint"] = fingerprint
+        if user_name:
+            ACTIVE_ENDPOINTS[endpoint_id]["user"] = user_name
+
+    # Update in-memory connection history
+    for entry in IN_MEMORY_CONNECTION_HISTORY:
+        if entry.get("endpoint_id") == endpoint_id:
+            if mac:
+                entry["mac_address"] = mac
+            if fingerprint:
+                entry["device_fingerprint"] = fingerprint
+            if new_name:
+                entry["hostname"] = new_name
+            if user_name:
+                entry["username"] = user_name
+
+    return {
+        "status": "success",
+        "message": "Endpoint configuration updated and device identifiers successfully linked.",
+        "endpoint_id": endpoint_id,
+        "endpoint": ACTIVE_ENDPOINTS.get(endpoint_id, {
+            "endpoint_id": endpoint_id,
+            "custom_name": new_name,
+            "mac_address": mac,
+            "device_fingerprint": fingerprint
+        })
+    }
+
+@router.delete("/{endpoint_id}")
+def delete_endpoint(endpoint_id: int):
+    """
+    Safely removes an endpoint and its associated logs from the database and active fleet registry.
+    """
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM endpoints WHERE endpoint_id = %s;", (endpoint_id,))
+                conn.commit()
+    except Exception as e:
+        logger.warning(f"Database delete_endpoint notice: {e}")
+
+    # Clean in-memory caches
+    ACTIVE_ENDPOINTS.pop(endpoint_id, None)
+    KICKED_ENDPOINTS.discard(endpoint_id)
+    PAUSED_ENDPOINTS.discard(endpoint_id)
+
+    # Clean in-memory connection history
+    global IN_MEMORY_CONNECTION_HISTORY
+    IN_MEMORY_CONNECTION_HISTORY = [
+        item for item in IN_MEMORY_CONNECTION_HISTORY if item.get("endpoint_id") != endpoint_id
+    ]
+
+    return {
+        "status": "deleted",
+        "message": f"Endpoint {endpoint_id} was successfully removed from the system.",
+        "endpoint_id": endpoint_id
+    }
 
 @router.post("/{endpoint_id}/kick")
 def kick_endpoint(endpoint_id: int):
@@ -269,3 +566,4 @@ def disconnect_endpoint(endpoint_id: int):
         ACTIVE_ENDPOINTS[endpoint_id]["status"] = "Offline"
         ACTIVE_ENDPOINTS[endpoint_id]["last_seen_time"] = 0
     return {"status": "disconnected", "endpoint_id": endpoint_id}
+

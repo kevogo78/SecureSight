@@ -17,6 +17,30 @@ class SystemTrayManager(QObject):
         self.tray = QSystemTrayIcon(QIcon(pixmap), self.app)
 
         self.menu = QMenu()
+        self.menu.setStyleSheet("""
+            QMenu {
+                background-color: #07130c;
+                color: #f8fafc;
+                border: 1px solid #1e293b;
+                border-radius: 8px;
+                padding: 6px;
+                font-family: 'Segoe UI', -apple-system, sans-serif;
+                font-size: 12px;
+            }
+            QMenu::item {
+                padding: 6px 16px;
+                border-radius: 6px;
+                color: #cbd5e1;
+            }
+            QMenu::item:selected {
+                background-color: #064e3b;
+                color: #34d399;
+            }
+            QMenu::item:disabled {
+                color: #64748b;
+                font-weight: 700;
+            }
+        """)
         self.status_action = self.menu.addAction("Status: Active")
         self.status_action.setEnabled(False)
 

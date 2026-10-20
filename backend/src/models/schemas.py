@@ -19,8 +19,31 @@ class TelemetryPayload(BaseModel):
     os_type: Optional[str] = None
     user: Optional[str] = None
     ip_address: Optional[str] = None
+    mac_address: Optional[str] = None
+    device_fingerprint: Optional[str] = None
+    website_url: Optional[str] = None
 
 class PresignedURLResponse(BaseModel):
     status: str
     log_id: int
     upload_url: Optional[str] = None
+
+class EndpointUpdate(BaseModel):
+    display_name: Optional[str] = None
+    custom_name: Optional[str] = None
+    mac_address: Optional[str] = None
+    device_fingerprint: Optional[str] = None
+    user: Optional[str] = None
+
+class ConnectionHistoryItem(BaseModel):
+    connection_id: int
+    endpoint_id: int
+    device_fingerprint: Optional[str] = None
+    mac_address: Optional[str] = None
+    user_id: Optional[int] = None
+    username: Optional[str] = None
+    ip_address: Optional[str] = None
+    hostname: Optional[str] = None
+    connected_at: Optional[str] = None
+    last_seen: Optional[str] = None
+    status: str = "Online"

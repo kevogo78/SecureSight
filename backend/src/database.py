@@ -11,7 +11,8 @@ try:
         database=DB_NAME,
         user=DB_USER,
         password=DB_PASS,
-        port=DB_PORT
+        port=DB_PORT,
+        connect_timeout=2
     )
 except Exception as e:
     connection_pool = None
@@ -21,7 +22,7 @@ except Exception as e:
 def get_db_connection():
     if not connection_pool:
         conn = psycopg2.connect(
-            host=DB_HOST, database=DB_NAME, user=DB_USER, password=DB_PASS, port=DB_PORT
+            host=DB_HOST, database=DB_NAME, user=DB_USER, password=DB_PASS, port=DB_PORT, connect_timeout=2
         )
         try:
             yield conn

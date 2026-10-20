@@ -38,9 +38,17 @@ def record_telemetry(payload: TelemetryPayload):
     ip_val = payload.ip_address or ACTIVE_ENDPOINTS.get(payload.endpoint_id, {}).get("ipAddress") or f"192.168.1.{100 + (payload.endpoint_id % 150)}"
     now_utc = datetime.datetime.now(datetime.timezone.utc)
 
+    mac_val = payload.mac_address or ACTIVE_ENDPOINTS.get(payload.endpoint_id, {}).get("mac_address")
+    fp_val = payload.device_fingerprint or ACTIVE_ENDPOINTS.get(payload.endpoint_id, {}).get("device_fingerprint")
+    existing_custom_name = ACTIVE_ENDPOINTS.get(payload.endpoint_id, {}).get("custom_name")
+
     ACTIVE_ENDPOINTS[payload.endpoint_id] = {
         "endpoint_id": payload.endpoint_id,
-        "name": hostname,
+        "name": existing_custom_name or hostname,
+        "hostname": hostname,
+        "custom_name": existing_custom_name,
+        "mac_address": mac_val,
+        "device_fingerprint": fp_val,
         "os": os_type,
         "osType": "mac" if "mac" in os_type.lower() else "win",
         "agent_ver": "1.0.0",
@@ -73,6 +81,7 @@ def record_telemetry(payload: TelemetryPayload):
         "ram_percent": payload.ram_percent,
         "filter_status": payload.filter_status,
         "dlp_flag": payload.dlp_flag,
+        "website_url": payload.website_url,
         "media_url": None,
         "hostname": hostname,
         "os_type": os_type,
@@ -112,26 +121,30 @@ def record_telemetry(payload: TelemetryPayload):
 
                 # 2. Ensure endpoint exists in endpoints table to satisfy foreign key
                 cur.execute("""
-                    INSERT INTO endpoints (endpoint_id, user_id, hostname, os_type, agent_ver, is_active, last_seen)
-                    VALUES (%s, %s, %s, %s, '1.0.0', TRUE, CURRENT_TIMESTAMP)
+                    INSERT INTO endpoints (
+                        endpoint_id, user_id, hostname, os_type, agent_ver, is_active, last_seen, mac_address, device_fingerprint
+                    )
+                    VALUES (%s, %s, %s, %s, '1.0.0', TRUE, CURRENT_TIMESTAMP, %s, %s)
                     ON CONFLICT (endpoint_id) DO UPDATE SET 
                         hostname = EXCLUDED.hostname,
                         os_type = EXCLUDED.os_type,
                         is_active = TRUE,
-                        last_seen = CURRENT_TIMESTAMP;
-                """, (payload.endpoint_id, valid_user_id, hostname, os_type))
+                        last_seen = CURRENT_TIMESTAMP,
+                        mac_address = COALESCE(EXCLUDED.mac_address, endpoints.mac_address),
+                        device_fingerprint = COALESCE(EXCLUDED.device_fingerprint, endpoints.device_fingerprint);
+                """, (payload.endpoint_id, valid_user_id, hostname, os_type, mac_val, fp_val))
 
                 cur.execute("""
                     INSERT INTO audit_logs (
                         endpoint_id, active_app, app_category, keystroke_count,
-                        activity_state, cpu_percent, ram_percent, filter_status, dlp_flag
+                        activity_state, cpu_percent, ram_percent, filter_status, dlp_flag, website_url
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING log_id;
                 """, (
                     payload.endpoint_id, payload.active_app, payload.app_category,
                     payload.keystroke_count, payload.activity_state, payload.cpu_percent,
-                    payload.ram_percent, payload.filter_status, payload.dlp_flag
+                    payload.ram_percent, payload.filter_status, payload.dlp_flag, payload.website_url
                 ))
                 log_id = cur.fetchone()[0]
 

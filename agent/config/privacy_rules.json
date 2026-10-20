@@ -1,0 +1,77 @@
+{
+  "rules": [
+    {
+      "rule_id": "rule_credit_cards",
+      "name": "Payment Card Numbers (PCI-DSS)",
+      "category": "regex",
+      "pattern": "\\b(?:\\d{4}[-\\s]?){3}\\d{4}\\b",
+      "replacement": "[REDACTED_CARD]",
+      "action": "mask_and_block",
+      "reason": "DLP_Credit_Card",
+      "enabled": true,
+      "is_builtin": true,
+      "description": "Detects and redacts standard 16-digit credit and debit card numbers."
+    },
+    {
+      "rule_id": "rule_ssn",
+      "name": "Social Security Numbers (SSN)",
+      "category": "regex",
+      "pattern": "\\b\\d{3}[-\\s]?\\d{2}[-\\s]?\\d{4}\\b",
+      "replacement": "[REDACTED_SSN]",
+      "action": "mask_and_block",
+      "reason": "DLP_SSN",
+      "enabled": true,
+      "is_builtin": true,
+      "description": "Detects and masks 9-digit US Social Security Numbers."
+    },
+    {
+      "rule_id": "rule_credentials",
+      "name": "Passwords & Secret Key Assignments",
+      "category": "regex",
+      "pattern": "(?i)\\b(password|passwd|pwd|secret|token|api[_-]?key|pin|cvv)\\s*[:=]\\s*(\\S+)",
+      "replacement": "\\1=[REDACTED_SECRET]",
+      "action": "mask_and_block",
+      "reason": "DLP_Credential",
+      "enabled": true,
+      "is_builtin": true,
+      "description": "Intercepts credential assignments and masks secret values in transit."
+    },
+    {
+      "rule_id": "rule_banking_domains",
+      "name": "Financial & Banking Portals",
+      "category": "domain",
+      "pattern": "(?i)\\b(chase\\.com|bankofamerica\\.com|wellsfargo\\.com|capitalone\\.com|citibank\\.com|paypal\\.com)\\b",
+      "replacement": "[BLOCKED_DOMAIN]",
+      "action": "mask_and_block",
+      "reason": "Banking_Domain_Detected",
+      "enabled": true,
+      "is_builtin": true,
+      "description": "Halts screen capture and masks keystrokes when banking portals are active."
+    },
+    {
+      "rule_id": "rule_process_vaults",
+      "name": "Password Vaults & Authenticators",
+      "category": "process",
+      "pattern": "(?i)(1password|keepass|bitwarden|nordpass|lastpass|dashlane|authenticator|signal|tor)",
+      "replacement": "[PROTECTED_VAULT]",
+      "action": "block_capture",
+      "reason": "Process_Blacklisted",
+      "enabled": true,
+      "is_builtin": true,
+      "description": "Prevents screen and keyboard exfiltration during password vault access."
+    },
+    {
+      "rule_id": "rule_auth_titles",
+      "name": "Authentication & MFA Prompts",
+      "category": "window_title",
+      "pattern": "(?i)(sign in|log in|login|password|bank of america|chase online|wells fargo|capital one|citibank|paypal|2fa|two-factor|authentication required)",
+      "replacement": "[AUTH_PROMPT]",
+      "action": "block_capture",
+      "reason": "Title_Blacklisted",
+      "enabled": true,
+      "is_builtin": true,
+      "description": "Suppresses screenshots while login prompts or MFA verification are open."
+    }
+  ]
+}
+

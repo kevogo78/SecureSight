@@ -54,8 +54,13 @@ class AgentOrchestrator:
         self.endpoint_id = derive_endpoint_id(self.endpoint_name)
         self.server_url = server_url or CONFIG["server_url"]
         
-        self.tracker = ActivityTracker(enable_keystrokes=True)
         self.privacy = PrivacyFilter()
+        self.sensitive_cooldown_until = 0.0
+        self.last_sensitive_reason = "Clean"
+        self.tracker = ActivityTracker(
+            enable_keystrokes=True,
+            on_sensitive_activity=self.on_sensitive_input_detected
+        )
         self.crypto = CryptoEngine(CONFIG["crypto_key_hex"])
         self.api = TelemetryAPIClient(self.server_url)
         self.tray = SystemTrayManager(self.app)
@@ -68,6 +73,12 @@ class AgentOrchestrator:
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.execute_polling_loop)
+
+    def on_sensitive_input_detected(self, reason: str):
+        """Dynamic DLP callback: activates 30-second screenshot suppression."""
+        self.sensitive_cooldown_until = time.time() + 30.0
+        self.last_sensitive_reason = reason
+        print(f"[DLP INTERLOCK] Sensitive input detected ({reason}). Dynamic screenshot capture suppressed.")
 
     def start(self):
         self.tracker.start()
@@ -86,7 +97,9 @@ class AgentOrchestrator:
                 "os_type": f"{platform.system()} {platform.release()}",
                 "user": getpass.getuser(),
                 "agent_ver": "1.0.0",
-                "ip_address": get_local_ip()
+                "ip_address": get_local_ip(),
+                "mac_address": self.tracker.get_mac_address(),
+                "device_fingerprint": self.tracker.get_device_fingerprint()
             }
             response = requests.post(reg_url, json=payload, timeout=3)
             if response.status_code != 200:
@@ -97,6 +110,10 @@ class AgentOrchestrator:
 
     def handle_manual_pause(self, paused: bool):
         self.is_suspended = paused
+        if paused:
+            self.tracker.set_keystrokes_enabled(False)
+        else:
+            self.tracker.set_keystrokes_enabled(True)
         try:
             action = "pause" if paused else "resume"
             pause_url = self.server_url.replace("/telemetry", f"/endpoints/{self.endpoint_id}/{action}")
@@ -110,17 +127,31 @@ class AgentOrchestrator:
         activity = self.tracker.get_and_reset_activity()
         kpm = activity.get("kpm", 0)
 
-        # Dynamically query active process and window title from activity tracker
+        # Dynamically query active process, window title, and active website URL
         window_info = self.tracker.get_active_window()
         active_proc = window_info.get("app_name") or "Code.exe"
         active_title = window_info.get("window_title_sanitized") or window_info.get("window_title_raw") or "Active Window"
+        website_url = window_info.get("website_url")
 
+        # 1. Environment DLP check (window title and process)
         is_sensitive, status_msg = self.privacy.evaluate_environment(active_proc, active_title)
         
+        # 2. Reactive stream DLP check (active typing in tracker)
+        is_stream_sensitive, stream_reason = self.tracker.is_sensitive_active(cooldown=30.0)
+        if is_stream_sensitive and not is_sensitive:
+            is_sensitive = True
+            status_msg = f"DLP_Active_Input_Masking ({stream_reason})"
+
+        # 3. Dynamic cooldown check
+        if time.time() < self.sensitive_cooldown_until and not is_sensitive:
+            is_sensitive = True
+            status_msg = f"DLP_Sensitive_Cooldown ({self.last_sensitive_reason})"
+
         if self.is_suspended:
             status_msg = "User_Suspended"
             is_sensitive = True
 
+        # Dynamic Screenshot Guard: strictly abort captures while sensitive info is detected
         capture_requested = (self.tick_counter % 6 == 0) and not is_sensitive
         file_hash = None
         iv_hex = None
@@ -133,7 +164,8 @@ class AgentOrchestrator:
         payload = {
             "endpoint_id": self.endpoint_id,
             "active_app": active_proc,
-            "app_category": "Development",
+            "app_category": "Browsing" if website_url else "Development",
+            "website_url": website_url,
             "keystroke_count": kpm,
             "activity_state": "Privacy_Suspended" if is_sensitive else "Active",
             "cpu_percent": metrics["cpu_percent"],
@@ -147,7 +179,9 @@ class AgentOrchestrator:
             "hostname": self.endpoint_name,
             "os_type": f"{platform.system()} {platform.release()}",
             "user": getpass.getuser(),
-            "ip_address": get_local_ip()
+            "ip_address": get_local_ip(),
+            "mac_address": metrics.get("mac_address") or self.tracker.get_mac_address(),
+            "device_fingerprint": metrics.get("device_fingerprint") or self.tracker.get_device_fingerprint()
         }
 
         res = self.api.transmit_telemetry(payload)
