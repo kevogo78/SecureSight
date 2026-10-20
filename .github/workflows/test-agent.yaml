@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - 'agent/**'
-      - '.github/workflows/test-agent.yml'
+      - '.github/workflows/test-agent.yaml'
   pull_request:
 
 jobs:
