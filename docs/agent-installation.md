@@ -1,6 +1,6 @@
-# Client Agent Installation & Setup Guide
+# SecureSight Client Agent Installation & Setup Guide
 
-The **EDMT Client Agent** is a lightweight, cross-platform Python application designed to collect privacy-filtered endpoint telemetry, track active window states, enforce client-side Data Loss Prevention (DLP), and encrypt periodic screen captures using **AES-256-GCM** before transmission to the cloud backend.
+The **SecureSight Client Agent** is a lightweight, cross-platform Python application designed to collect privacy-filtered endpoint telemetry, track active window states, enforce client-side Data Loss Prevention (DLP), encrypt periodic screen captures using **AES-256-GCM**, and generate structured keystroke audit snapshot `.txt` files with S3 mirroring before transmission to the cloud backend.
 
 ---
 
@@ -56,6 +56,7 @@ Key dependencies installed include:
 - `cryptography`: Cryptographic primitives for AES-256-GCM authenticated encryption.
 - `requests`: HTTP client for telemetry ingestion and S3 presigned binary streaming.
 - `pynput`: Low-level keyboard event hooks for aggregate keystroke activity auditing.
+- `boto3`: AWS SDK for direct S3 keystroke snapshot and encrypted capture synchronization.
 
 ---
 
@@ -69,7 +70,8 @@ The agent reads configuration parameters from `agent/config/config.json`. A samp
   "crypto_key_hex": "<YOUR_64_CHAR_HEX_AES_256_KEY>",
   "interval_ms": 10000,
   "enable_keystrokes": true,
-  "capture_keys_to_file": false
+  "capture_keys_to_file": true,
+  "s3_bucket_name": "<YOUR_S3_BUCKET_NAME>"
 }
 ```
 
@@ -81,10 +83,31 @@ The agent reads configuration parameters from `agent/config/config.json`. A samp
 | `crypto_key_hex` | 256-bit hexadecimal string (64 characters) used for AES-GCM media encryption. Must match the master key in the Admin Dashboard. | `0123456789abcdef...` |
 | `interval_ms` | Telemetry transmission frequency in milliseconds. | `10000` (10 seconds) |
 | `enable_keystrokes`| Enables aggregate keystrokes-per-minute (KPM) activity tracking. | `true` |
-| `capture_keys_to_file`| When enabled for diagnostic auditing, writes key events to local text file before redaction. | `false` |
+| `capture_keys_to_file`| When enabled, generates periodic keystroke snapshot `.txt` files in `agent/logs/`. | `true` |
+| `s3_bucket_name`| Target Amazon S3 bucket name for direct keystroke snapshot upload and screenshot mirroring. If omitted, S3 uploads are gracefully skipped with diagnostic logging. | `"securesight-captures-bucket"` |
 
 > [!NOTE]
-> Environment variable override: You can also specify the server URL via the `EDMT_SERVER_URL` environment variable.
+> Environment variable overrides: You can override settings at runtime using `EDMT_SERVER_URL` or `SECURESIGHT_SERVER_URL` and `S3_BUCKET_NAME`.
+
+---
+
+## 📝 Keystroke Audit Snapshots (`.txt`)
+
+When `capture_keys_to_file` is enabled, the agent's Activity Tracker automatically generates timestamped `.txt` snapshot files stored in `agent/logs/` and mirrored to Amazon S3 under `keylogs/{endpoint_id}/`:
+
+### Snapshot Triggers
+1. **Periodic Active Snapshot**: Generated every 60 seconds while typing activity is observed (`<hostname>_<timestamp>.txt`).
+2. **Pause Snapshot**: Automatically triggered when monitoring consent is paused from the system tray (`<hostname>_<timestamp>_pause.txt`).
+3. **Session Termination**: Generated when the user stops monitoring or exits the agent (`<hostname>_<timestamp>_end_session.txt`).
+4. **Admin Kick Snapshot**: Generated if the workstation receives a kick signal from the dashboard (`<hostname>_<timestamp>_kicked.txt`).
+
+### Zero-Redundancy & Empty-State Handling
+- **Interval Buffer Reset**: The keystroke buffer resets immediately after each snapshot write. Each `.txt` file contains solely the keys typed during that specific observation interval, preventing duplicate lines across consecutive logs.
+- **Empty-State Diagnostics**: If zero typing occurs during an observation cycle or before a pause/kick event, the snapshot includes an explicit diagnostic banner:
+  ```
+  [No keystrokes recorded in this period.]
+  ```
+- **Local Sanitization**: All passwords, credit cards, and sensitive tokens are redacted in local workstation memory before the `.txt` snapshot is saved or uploaded.
 
 ---
 
@@ -98,15 +121,15 @@ python -m src.main
 *(Or on Windows: `python src/main.py`)*
 
 ### 1. Interactive Consent Modal Flow
-Upon launch, the agent presents an **Interactive Consent Authorization Modal**:
-- The dialog informs the user of active auditing, metrics collected, and local DLP protections.
+Upon launch, the agent presents the **SecureSight Consent Authorization Modal**:
+- The dialog displays the official SecureSight shield branding and informs the user of active auditing, metrics collected, and local DLP protections.
 - Users can review the target server URL and computer name.
 - **Grant Consent**: Clicking **"I Consent & Authorize"** registers the workstation with the fleet backend and activates background monitoring.
 - **Decline Consent**: Clicking **"Decline / Exit"** immediately shuts down the agent without transmitting any system data.
 
 ```
 +-------------------------------------------------------------+
-|               ENDPOINT MONITORING CONSENT NOTICE            |
+|              SECURESIGHT MONITORING CONSENT NOTICE          |
 +-------------------------------------------------------------+
 | This workstation is subject to cybersecurity auditing and    |
 | performance telemetry monitoring.                           |
@@ -122,11 +145,11 @@ Upon launch, the agent presents an **Interactive Consent Authorization Modal**:
 ```
 
 ### 2. System Tray Controls & User Autonomy
-Once running, the agent minimizes to the operating system's system tray notification area:
-- **Status Indicator**: Right-clicking the tray icon displays current monitoring status.
-- **Pause Consent**: Selecting **"Pause Monitoring Consent"** temporarily suspends foreground telemetry, flags the status as `User_Suspended`, and prevents screenshot capture.
-- **Resume Consent**: Selecting **"Resume Monitoring Consent"** restores active auditing.
-- **Exit & Disconnect**: Selecting **"Exit Agent"** performs a clean shutdown and immediately notifies the backend via `/api/v1/endpoints/{id}/disconnect`, transitioning the workstation to **Offline / Standby** status in the Admin Dashboard.
+Once running, the agent minimizes to the operating system's system tray notification area with the SecureSight shield icon:
+- **Status Indicator**: Hovering or right-clicking the tray icon displays current monitoring status (`SecureSight - Monitoring Active`, `SecureSight - Monitoring Paused`).
+- **Pause Consent**: Selecting **"Pause Monitoring Consent"** temporarily suspends foreground telemetry, flags the status as `User_Suspended`, flushes a `_pause.txt` keystroke snapshot, and halts screenshot capture.
+- **Resume Consent**: Selecting **"Resume Monitoring Consent"** restores active auditing and restarts the session interval timer.
+- **Exit & Disconnect**: Selecting **"Exit Agent"** performs a clean shutdown, flushes an `_end_session.txt` snapshot, and immediately notifies the backend via `/api/v1/endpoints/{id}/disconnect`, transitioning the workstation to **Offline / Standby** status in the Admin Dashboard.
 
 ---
 
@@ -160,19 +183,40 @@ The agent evaluates active process names and window titles against local rules d
 
 ---
 
+## 🧪 Running Agent Tests
+
+The agent codebase includes 36 comprehensive unit tests validating tracking, cryptographic operations, DLP rules, and keystroke snapshot generation:
+
+```bash
+pytest agent/tests -v
+```
+
+---
+
 ## 📦 Packaging as an Executable (PyInstaller)
 
-To deploy the agent on end-user machines without requiring manual Python installation, package the agent using PyInstaller:
+To deploy the agent on end-user machines without requiring manual Python installation, package the agent using PyInstaller with the bundled assets:
 
+**On Windows:**
 ```bash
 pip install pyinstaller
 
 pyinstaller --noconfirm --onedir --windowed \
-  --name "EndpointMonitorAgent" \
+  --name "SecureSightAgent" \
   --add-data "config;config" \
+  --add-data "assets;assets" \
   --add-data "src/ui;src/ui" \
   src/main.py
 ```
 
-The resulting binary will be output to `agent/dist/EndpointMonitorAgent/` and can be distributed to enterprise endpoints.
+**On macOS / Linux:**
+```bash
+pyinstaller --noconfirm --onedir --windowed \
+  --name "SecureSightAgent" \
+  --add-data "config:config" \
+  --add-data "assets:assets" \
+  --add-data "src/ui:src/ui" \
+  src/main.py
+```
 
+The resulting binary will be output to `agent/dist/SecureSightAgent/` and can be distributed to enterprise endpoints.

@@ -1,5 +1,5 @@
 =====================================================================
-  ENDPOINT DEVICE MONITORING & CONSENT SYSTEM (EDMT)
+  SECURESIGHT - ENDPOINT OBSERVABILITY & CONSENT PLATFORM
   Georgia Gwinnett College - ITEC 4810 Senior Capstone
   Test Device Setup & Installation Guide
 =====================================================================
@@ -11,8 +11,8 @@ for deploying to Windows and macOS test workstations.
 1. WINDOWS TEST MACHINE INSTALLATION
 ---------------------------------------------------------------------
 Option A: Standalone Windows Executable (No Python Required)
-  1. Double-click `EDMT_Agent_Windows.exe`.
-  2. The native Consent UI dialog will appear.
+  1. Double-click `SecureSight_Agent_Windows.exe` (or `EDMT_Agent_Windows.exe`).
+  2. The native SecureSight Consent UI dialog will appear.
 
 Option B: Automated Batch Script (With Python 3.9+)
   1. Double-click `install_agent_windows.bat` OR in PowerShell run:
@@ -27,7 +27,7 @@ Option A: 1-Click Finder Launcher
   1. Double-click `install_agent_mac.command` in Finder.
      (If Gatekeeper displays a security notice, right-click the file
       and click "Open", or run: `chmod +x install_agent_mac.command`).
-  2. The script creates an isolated virtual environment (`.venv_edmt`),
+  2. The script creates an isolated virtual environment (`.venv_securesight`),
      installs all required packages, and launches the Consent UI.
 
 Option B: Terminal Execution
@@ -60,14 +60,14 @@ Option B: Terminal Execution
    • The workstation immediately appears in the fleet table and overview cards.
    • Real-time telemetry, active applications, CPU%, RAM%, and keystroke
      intensity (KPM) will stream live.
-   • Decrypted screenshots can be inspected.
+   • Decrypted screenshots can be inspected in the Screenshots gallery.
 
 ---------------------------------------------------------------------
 4. FLEET CONTROLS & KICK FEATURE
 ---------------------------------------------------------------------
-• Keystroke Audit Logging Toggle:
-  Toggle hardware keystrokes on/off directly from the dashboard. When
-  enabled, unmasked keystrokes are recorded to `agent/keystrokes_audit.txt`.
+• Keystroke Audit Logging:
+  Keystrokes are automatically logged into timestamped 1-minute, pause,
+  and session-end .txt files and mirrored to Amazon S3.
 • Kick / De-authorize Endpoint:
   Click the red "Kick" button on any workstation to immediately terminate
   its monitoring session. The agent receives the de-authorization signal

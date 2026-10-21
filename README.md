@@ -1,4 +1,4 @@
-# Privacy-Centric Endpoint Observability System (EDMT)
+# SecureSight: Privacy-Centric Endpoint Observability System
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React-18.3+-61DAFB.svg?logo=react&logoColor=black)](https://react.dev)
@@ -7,20 +7,22 @@
 [![AWS](https://img.shields.io/badge/AWS-Free_Tier_Ready-FF9900.svg?logo=amazon-aws&logoColor=white)](https://aws.amazon.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-An enterprise-grade, cloud-native cybersecurity telemetry and endpoint observability platform engineered for continuous compliance auditing and threat detection without compromising end-user privacy. Architected for cost-effective deployment within the **AWS Free Tier**.
+**SecureSight** is an enterprise-grade, cloud-native cybersecurity telemetry and endpoint observability platform engineered for continuous compliance auditing and insider threat detection without compromising end-user privacy. Architected for cost-effective deployment within the **AWS Free Tier**.
 
 ---
 
 ## 📖 Overview
 
-Traditional endpoint surveillance tools indiscriminately harvest sensitive user data, including passwords, personal communications, and financial records. The **Privacy-Centric Endpoint Observability System (EDMT)** re-engineers this paradigm by enforcing **zero-knowledge privacy safeguards directly on the endpoint** prior to any cloud transmission.
+Traditional endpoint surveillance tools indiscriminately harvest sensitive user data, including passwords, personal communications, and financial records. **SecureSight** re-engineers this paradigm by enforcing **zero-knowledge privacy safeguards directly on the endpoint** prior to any cloud transmission.
 
 ### 🌟 Core Capabilities
-- **Client-Side Data Loss Prevention (DLP)**: Evaluates active processes and window titles against regex patterns and blacklists. Automatically suppresses capture for banking portals, password managers, and credential inputs.
-- **Explicit Consent Framework**: Workstations are never monitored invisibly. Users must authorize monitoring via an interactive consent modal upon launch, and can pause/resume auditing at any time via the system tray.
-- **End-to-End Cryptography**: Display buffers are encrypted with **AES-256-GCM** authenticated encryption in endpoint memory before direct upload to Amazon S3 via presigned URLs.
-- **Dynamic Heartbeat & Offline History**: The backend detects disconnected or terminated workstations within 35 seconds, transitioning them into an **Offline / Suspended History** view with full connection audit trails.
-- **Real-Time Security Dashboard**: Interactive React SPA featuring real-time activity timelines, system performance telemetry (CPU%, RAM%), compliance reporting, and administrative endpoint controls.
+- **Client-Side Data Loss Prevention (DLP)**: Evaluates active processes and window titles against dynamic regex patterns and blacklists. Automatically suppresses capture and masks typing for banking portals, password managers, and credential inputs.
+- **Explicit Consent Framework**: Workstations are never monitored invisibly. Users must authorize monitoring via an interactive consent modal upon launch, and can pause or resume auditing at any time via the system tray.
+- **End-to-End Cryptography**: Display buffers are encrypted with **AES-256-GCM** authenticated encryption in endpoint memory before direct upload to Amazon S3 via presigned URLs. Screenshots are decrypted exclusively on-demand for authenticated administrators.
+- **Timestamped Keystroke Audit Snapshots**: Keystrokes are automatically snapshotted into timestamped `.txt` files on 1-minute intervals, manual pauses, session ends, and administrative disconnects. Inactive recording windows explicitly log an empty-state message (`[No keystrokes recorded in this period.]`) rather than repeating stale input.
+- **Automatic Cloud S3 Mirroring**: Keylog `.txt` audit files stream directly to the fleet server API and are mirrored into Amazon S3 (`keylogs/{endpoint_id}/{filename}`) for immutable compliance archival.
+- **Dynamic Heartbeat & Session Uptime Tracking**: The backend accurately measures active session uptime and detects disconnected workstations within 35 seconds, transitioning them into an **Offline** view with complete historical telemetry and hardware device fingerprinting (`MAC` / `Fingerprint`).
+- **Real-Time Security Dashboard**: Interactive React SPA featuring real-time activity timelines, system performance telemetry (CPU%, RAM%), interactive Keylog `.txt` audit explorer, encrypted Screenshot gallery with batch deletion, compliance reporting, and administrative controls (kick, pause, friendly rename, and deletion).
 
 ---
 
@@ -29,32 +31,37 @@ Traditional endpoint surveillance tools indiscriminately harvest sensitive user 
 ```mermaid
 flowchart TD
     subgraph Client Endpoints
-        AGENT[Python PyQt6 Desktop Agent]
-        DLP[Local DLP & Redaction Engine]
-        CRYPTO[AES-256-GCM Encryption]
+        AGENT["SecureSight Desktop Agent (PyQt6)"]
+        DLP["Local DLP & Privacy Filter"]
+        CRYPTO["AES-256-GCM Encryption"]
+        AUDIT["Timestamped Snapshot & S3 Sync"]
     end
 
     subgraph AWS Cloud Deployment (Ubuntu 24.04 LTS)
-        NGINX[NGINX Reverse Proxy :80]
-        DASH[React SPA Static Web Root]
-        API[FastAPI Ingestion Engine :8000]
+        NGINX["NGINX Reverse Proxy (:80 / :443)"]
+        DASH["SecureSight React Dashboard (Static Web Root)"]
+        API["FastAPI Ingestion Engine (:8000)"]
     end
 
     subgraph Managed Cloud Infrastructure
-        RDS[(Amazon RDS PostgreSQL)]
-        S3[(Amazon S3 Encrypted Media Bucket)]
+        RDS[("Amazon RDS PostgreSQL\n(Threaded Connection Pool)")]
+        S3[("Amazon S3 Media & Keylog Bucket")]
     end
 
     AGENT --> DLP
     DLP --> CRYPTO
-    CRYPTO -->|Telemetry Heartbeat /api/v1/telemetry| NGINX
-    CRYPTO -->|Direct Encrypted Upload| S3
+    DLP --> AUDIT
+    CRYPTO -->|Direct Encrypted Screenshot Upload| S3
+    AUDIT -->|1-Min & Event Keylog Sync /keylogs/upload| NGINX
+    AGENT -->|Telemetry Heartbeat /api/v1/telemetry| NGINX
     
     NGINX -->|/api/*| API
     NGINX -->|/*| DASH
-    API -->|Read / Write Logs & Metrics| RDS
+    API -->|Read / Write Telemetry & Privacy Rules| RDS
+    API -->|Mirror Keylog Text Files| S3
     API -->|Generate Presigned S3 URLs| S3
-    DASH -->|REST APIs| API
+    API -->|Authenticated Decryption /media/{id}/image| S3
+    DASH -->|REST APIs & Admin Sessions| API
 ```
 
 ---
@@ -63,11 +70,11 @@ flowchart TD
 
 | Layer | Component | Technologies |
 | :--- | :--- | :--- |
-| **Endpoint Agent** | Desktop Application | Python 3.10+, PyQt6, PyAutoGUI, Cryptography, Pynput, Requests |
-| **Backend API** | Ingestion Engine | FastAPI, Uvicorn, Pydantic, Psycopg2, Boto3 |
-| **Frontend** | Security Operations Dashboard | React 18, Vite, Tailwind CSS v4, Lucide Icons, Recharts, Axios |
-| **Database** | Relational Telemetry Store | Amazon RDS PostgreSQL (Tables: `endpoints`, `audit_logs`, `telemetry_logs`, `media_captures`, `users`) |
-| **Object Storage**| Encrypted Media Store | Amazon S3 with AES-256-GCM presigned PUT/GET access |
+| **Endpoint Agent** | SecureSight Desktop Application | Python 3.10+, PyQt6, PyAutoGUI, Cryptography, Pynput, Boto3, Requests |
+| **Backend API** | Ingestion Engine | FastAPI, Uvicorn, Pydantic, Psycopg2 (ThreadedConnectionPool), Boto3 |
+| **Frontend** | SecureSight Dashboard | React 18, Vite, Tailwind CSS v4, Lucide Icons, Recharts, Axios |
+| **Database** | Relational Telemetry Store | Amazon RDS PostgreSQL (Tables: `endpoints`, `endpoint_connection_history`, `audit_logs`, `telemetry_logs`, `media_captures`, `privacy_rules`, `users`) |
+| **Object Storage**| Encrypted Media & Audit Store | Amazon S3 with AES-256-GCM presigned PUT/GET access and keylog archival |
 | **Infrastructure**| Cloud Hosting | AWS EC2 (Ubuntu 24.04 LTS), NGINX Reverse Proxy, Systemd daemons |
 
 ---
@@ -76,28 +83,36 @@ flowchart TD
 
 ```
 ITEC4810_Capstone/
-├── agent/                 # Python PyQt6 client surveillance agent
-│   ├── config/            # Blacklist definitions & endpoint configuration
-│   ├── src/               # Core trackers, crypto engine, UI modals, tray manager
-│   └── tests/             # Unit and integration tests for agent modules
-├── backend/               # FastAPI backend ingestion and management API
-│   ├── src/               # API routes, models, DB connectors, S3 helpers
-│   └── tests/             # Pytest endpoint validation tests
-├── dashboard/             # React single-page administrative dashboard
-│   ├── src/               # Components, views, Tailwind styles, and API services
+├── agent/                 # SecureSight Python PyQt6 desktop agent
+│   ├── assets/            # SecureSight branding artwork & icons
+│   ├── config/            # Privacy rules definitions, blacklist, & endpoint configuration
+│   ├── src/               # Core trackers, crypto engine, DLP filter, UI modals, tray manager
+│   └── tests/             # Unit and integration tests for agent modules (36 passing tests)
+├── backend/               # FastAPI backend ingestion and fleet management API
+│   ├── src/
+│   │   ├── routes/        # Telemetry, endpoints, keylogs, audit, media, auth, and privacy
+│   │   ├── database.py    # ThreadedConnectionPool & transaction rollback protection
+│   │   └── utils/         # S3 presigned URL generation and Boto3 client helpers
+│   └── tests/             # Pytest endpoint, media authorization, and lifecycle tests (34 tests)
+├── dashboard/             # SecureSight React single-page administrative dashboard
+│   ├── public/branding/   # SecureSight logos & UI brand assets
+│   ├── src/
+│   │   ├── components/    # Modals, header, sidebar, session players, and viewers
+│   │   ├── views/         # FleetOverview, Endpoints, EndpointDetail, Activity, Reports, Settings
+│   │   └── services/      # Axios API client, authentication state, and endpoints store
 │   └── package.json       # Vite and frontend dependencies
 ├── database/              # PostgreSQL database initialization scripts
-│   ├── schema.sql         # Relational schema (tables, foreign keys, indices)
-│   └── seed.sql           # Default admin users and cleanup routines
+│   ├── schema.sql         # Relational schema (tables, foreign keys, performance indices)
+│   └── seed.sql           # Default admin users, cleanup routines, and baseline privacy rules
 ├── docs/                  # Project documentation (Jekyll & Markdown)
 │   ├── index.md           # Documentation home
-│   ├── agent-installation.md # Client setup guide
-│   ├── aws-deployment-guide.md # Cloud infrastructure deployment
+│   ├── agent-installation.md # Client setup & configuration guide
+│   ├── aws-deployment-guide.md # Cloud infrastructure & NGINX reverse proxy deployment
 │   ├── threat-model.md    # STRIDE threat assessment
 │   └── demos.md           # Verification testing scenarios
 └── scripts/               # Automation & deployment shell scripts
-    ├── deploy-ec2.sh      # Automated EC2 pull, build, and restart script
-    └── init-rds.sh        # RDS PostgreSQL schema initialization script
+    ├── deploy-ec2.sh      # Automated EC2 pull, build, service reload, and restart script
+    └── init-rds.sh        # Automated RDS PostgreSQL schema initialization script
 ```
 
 ---
@@ -124,7 +139,7 @@ npm run dev
 ```
 *Dashboard available at: `http://localhost:5173/`*
 
-#### Client Agent (Python PyQt6)
+#### SecureSight Client Agent (Python PyQt6)
 ```bash
 cd agent
 python -m venv venv
@@ -149,9 +164,14 @@ cd /home/ubuntu/ITEC4810_Capstone
 
 ## 🧪 Testing & Quality Assurance
 
+Run client agent tests with pytest:
+```bash
+pytest agent/tests
+```
+
 Run backend API tests with pytest:
 ```bash
-python -m pytest backend/tests
+pytest backend/tests
 ```
 
 Build the frontend dashboard for production:

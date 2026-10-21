@@ -1,6 +1,6 @@
 # AWS Cloud Deployment & Infrastructure Guide
 
-This guide details the complete end-to-end cloud provisioning and deployment procedure for the **Privacy-Centric Endpoint Observability System (EDMT)** on Amazon Web Services (AWS), optimized to operate within the **AWS Free Tier**.
+This guide details the complete end-to-end cloud provisioning and deployment procedure for the **SecureSight Endpoint Observability Platform** on Amazon Web Services (AWS), optimized to operate reliably within the **AWS Free Tier**.
 
 ---
 
@@ -19,11 +19,13 @@ This guide details the complete end-to-end cloud provisioning and deployment pro
 |  |   ┌───────────────┐  /api/v1/*   ┌─────────────────────────────────────┐    |  |
 |  |   │     NGINX     │ ───────────► │ FastAPI Ingestion Engine (Port 8000)│    |  |
 |  |   │ Reverse Proxy │              │ Systemd: endpoint-api.service       │    |  |
-|  |   └───────┬───────┘              └──────────────────┬──────────────────┘    |  |
-|  |           │                                         │                       |  |
-|  |           ▼ /* (Static SPA)                         │                       |  |
+|  |   │ charset utf-8 │              │ - Auth & Session Cookies            │    |  |
+|  |   └───────┬───────┘              │ - Server-Side Image Decryption      │    |  |
+|  |           │                      │ - Dynamic Privacy Rules Sandbox     │    |  |
+|  |           │                      │ - ThreadedConnectionPool            │    |  |
+|  |           ▼ /* (Static SPA)      └──────────────────┬──────────────────┘    |  |
 |  |   ┌───────────────────────────────┐                 │                       |  |
-|  |   │ React Dashboard (/usr/share)  │                 │                       |  |
+|  |   │ SecureSight Dashboard (/dist) │                 │                       |  |
 |  |   └───────────────────────────────┘                 │                       |  |
 |  +-----------------------------------------------------┼-----------------------+  |
 |                                                        │                          |
@@ -32,8 +34,8 @@ This guide details the complete end-to-end cloud provisioning and deployment pro
 |       +───────────────────────────+                    +───────────────────────+  |
 |       | Amazon RDS PostgreSQL     |                    | Amazon S3 Bucket      |  |
 |       | db.t3.micro / db.t4g.micro|                    | Encrypted Media Store |  |
-|       | Tables: users, endpoints, |                    | Presigned PUT/GET URLs|  |
-|       | audit_logs, telemetry_logs|                    | AES-256-GCM Buffers   |  |
+|       | 7 Relational Tables       |                    | screenshots/*.enc     |  |
+|       | Cascading Deletion Rules  |                    | keylogs/*.txt         |  |
 |       +───────────────────────────+                    +───────────────────────+  |
 +-----------------------------------------------------------------------------------+
 ```
@@ -51,7 +53,7 @@ Before deploying, ensure you have provisioned:
    - `Custom TCP (8000)`: Restricted to local loopback `127.0.0.1` or internal VPC.
 3. **Amazon RDS PostgreSQL Instance**: Single-AZ `db.t3.micro` or `db.t4g.micro` with public accessibility configured or accessible within the EC2 VPC Security Group on port `5432`.
 4. **Amazon S3 Bucket**: Created in your target region (e.g., `us-east-1`) with private ACL and server-side encryption enabled.
-5. **IAM Credentials**: An IAM user or instance role with `s3:PutObject`, `s3:GetObject`, and `s3:ListBucket` permissions.
+5. **IAM Credentials**: An IAM user or EC2 IAM role with `s3:PutObject`, `s3:GetObject`, and `s3:ListBucket` permissions.
 
 ---
 
@@ -106,18 +108,20 @@ psql -h <YOUR_RDS_ENDPOINT>.us-east-1.rds.amazonaws.com \
      -f database/schema.sql
 ```
 
-The database structure consists of 5 core tables:
+The database structure consists of 7 relational tables:
 
 | Table Name | Description |
 | :--- | :--- |
-| `users` | Administrator and Auditor credentials, roles, and hashed passwords. |
-| `endpoints` | Monitored workstations, computer hostnames, OS types, active status, and last seen timestamps. |
-| `telemetry_logs` | Performance metrics (CPU%, RAM%, Disk%, Network I/O, Uptime). |
-| `audit_logs` | Real-time events, active application, keystroke rates, privacy states, and DLP flags. |
-| `media_captures` | S3 object keys, SHA-256 hashes, and AES-256-GCM initialization vectors (IV). |
+| `users` | Administrator, Auditor, and Operator credentials with PBKDF2/SHA-256 password hashing. |
+| `endpoints` | Monitored workstations, computer hostnames, custom names, MAC address, hardware fingerprint, and active status. |
+| `endpoint_connection_history` | Audit trail of workstation connections, sessions, IP associations, and timestamps. |
+| `telemetry_logs` | High-frequency time-series system metrics (CPU%, RAM%, Disk%, Network I/O, Uptime). |
+| `audit_logs` | Real-time compliance events, active foreground window titles, keystroke counts, privacy states, and DLP flags. |
+| `media_captures` | Encrypted capture metadata references, S3 object keys, file hashes, and AES-256-GCM initialization vectors. |
+| `privacy_rules` | Database-backed dynamic regex rules for real-time redaction, mask replacement, and categorization. |
 
-### Applying Seed Users & Clearing Stale Records
-Run `database/seed.sql` to initialize default administrative credentials:
+### Applying Seed Users & Baseline Rules
+Run `database/seed.sql` to initialize default administrative credentials and baseline DLP rules:
 
 ```bash
 psql -h <YOUR_RDS_ENDPOINT>.us-east-1.rds.amazonaws.com \
@@ -144,7 +148,7 @@ deactivate
 ```
 
 ### Environment Variables Configuration
-Create the production environment file at `/home/ubuntu/ITEC4810_Capstone/backend/.env`:
+Create the production environment configuration file at `/home/ubuntu/ITEC4810_Capstone/backend/.env`:
 
 ```ini
 # Database Connection Settings
@@ -165,14 +169,17 @@ DASHBOARD_ADMIN_USER=administrator
 DASHBOARD_ADMIN_PASSWORD=<YOUR_ADMIN_PASSWORD>
 DASHBOARD_SESSION_SECRET=<YOUR_RANDOM_SECRET_AT_LEAST_32_CHARS>
 DASHBOARD_COOKIE_SECURE=false
-SCREENSHOT_KEY_HEX=<YOUR_64_HEX_CHAR_ENCRYPTION_KEY>
+SCREENSHOT_KEY_HEX=<YOUR_64_HEX_CHAR_AES_256_ENCRYPTION_KEY>
 
 # Application Security
 SECRET_KEY=<YOUR_RANDOM_SESSION_SECRET_KEY>
 ```
 
+> [!TIP]
+> If your EC2 instance uses an SSL certificate (HTTPS), set `DASHBOARD_COOKIE_SECURE=true` so that admin session cookies enforce the `Secure` flag.
+
 ### Configure Systemd Service (`endpoint-api.service`)
-Create the systemd daemon file to ensure FastAPI runs continuously in the background and restarts on system reboot:
+Create the systemd daemon file to ensure FastAPI runs continuously in the background and restarts automatically:
 
 ```bash
 sudo nano /etc/systemd/system/endpoint-api.service
@@ -182,7 +189,7 @@ Paste the following service definition:
 
 ```ini
 [Unit]
-Description=FastAPI Endpoint Monitoring Daemon
+Description=SecureSight FastAPI Endpoint Monitoring Daemon
 After=network.target
 
 [Service]
@@ -210,7 +217,7 @@ sudo systemctl status endpoint-api --no-pager
 
 ## 🌐 4. NGINX Reverse Proxy & Frontend SPA Deployment
 
-### Build the React Dashboard
+### Build the SecureSight React Dashboard
 Compile the optimized production bundle with Vite and Tailwind CSS v4:
 
 ```bash
@@ -233,7 +240,7 @@ Create the site configuration file:
 sudo nano /etc/nginx/sites-available/endpoint-monitor
 ```
 
-Paste the following NGINX configuration:
+Paste the following NGINX configuration (with explicit `charset utf-8;` directive to ensure Unicode glyphs and status badges render cleanly without encoding artifacts):
 
 ```nginx
 server {
@@ -243,6 +250,9 @@ server {
 
     root /usr/share/nginx/html;
     index index.html index.htm;
+
+    # Explicit UTF-8 character encoding
+    charset utf-8;
 
     # Bypass unnecessary requests from SPA router
     location = /favicon.ico { 
@@ -297,6 +307,7 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+
     location / {
         try_files $uri $uri/ /index.html;
     }
@@ -325,10 +336,10 @@ chmod +x scripts/deploy-ec2.sh
 
 The script automatically executes:
 1. `git pull origin main` to pull latest changes.
-2. Updates backend dependencies and applies virtual environment fixes.
+2. Updates backend dependencies in the virtual environment.
 3. Installs frontend packages and executes `npm run build`.
 4. Deploys static build artifacts to `/usr/share/nginx/html/`.
-5. Restarts `endpoint-api` and `nginx` services with zero downtime.
+5. Restarts `endpoint-api` and `nginx` services cleanly.
 
 ---
 
@@ -343,5 +354,4 @@ The script automatically executes:
 2. **Restrict PostgreSQL Security Group**:
    Ensure port `5432` on your RDS instance is strictly accessible only from the Security Group ID of your EC2 instance.
 3. **S3 Lifecycle Rules**:
-   Configure a 30-day expiration lifecycle rule on your Amazon S3 bucket to prevent accumulation of historical screenshot buffers.
-
+   Configure a 30-day expiration lifecycle rule on your Amazon S3 bucket for `screenshots/` and `keylogs/` prefixes to prevent accumulation of historical buffers.
