@@ -103,8 +103,8 @@ class ActivityTracker:
         self.keystroke_log_file = self._resolve_audit_file_path(keystroke_log_file)
         self._keyboard_listener = None
         self.keystroke_buffer = []  # In-memory recent keys for DLP pattern detection
-        self._write_buffer = []     # In-memory buffer for local text file writing
-        self._session_buffer = []   # Complete cumulative typing buffer for the active recording session (from trigger to pause)
+        self._write_buffer = []     # In-memory buffer for interval writing
+        self._session_buffer = []   # Buffer for current active recording window
         if not s3_bucket_name and not os.getenv("S3_BUCKET_NAME") and not os.getenv("S3_BUCKET"):
             try:
                 from dotenv import load_dotenv
@@ -112,6 +112,14 @@ class ActivityTracker:
                 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
                 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
             except ImportError:
+                pass
+            try:
+                cfg_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "config", "config.json"))
+                if os.path.exists(cfg_path):
+                    with open(cfg_path, "r", encoding="utf-8") as cf:
+                        loaded_cfg = json.load(cf)
+                        s3_bucket_name = loaded_cfg.get("s3_bucket_name")
+            except Exception:
                 pass
         self.s3_bucket_name = s3_bucket_name or os.getenv("S3_BUCKET_NAME", os.getenv("S3_BUCKET"))
         self._s3_client = None
@@ -166,13 +174,21 @@ class ActivityTracker:
         file_path = os.path.join(keylogs_dir, filename)
 
         with self._lock:
-            # Retain all typing from the time it was triggered until now / paused
-            if self._session_buffer:
-                buffer_content = "".join(self._session_buffer)
-            elif self._write_buffer:
-                buffer_content = "".join(self._write_buffer)
+            # Capture keystrokes typed specifically during this recording window
+            typed_chars = list(self._write_buffer) if self._write_buffer else list(self._session_buffer)
+            if typed_chars:
+                buffer_content = "".join(typed_chars)
             else:
-                buffer_content = f"[No keystrokes recorded in this window - Event: {clean_trigger}]\n"
+                if clean_trigger == "1-min":
+                    buffer_content = "[No keystrokes were typed during this 1-minute recording interval.]\n"
+                elif clean_trigger == "pause":
+                    buffer_content = "[No keystrokes were typed in this recording window before monitoring was paused.]\n"
+                elif clean_trigger == "end-session":
+                    buffer_content = "[No keystrokes were typed in this recording window before monitoring ended.]\n"
+                elif clean_trigger == "kicked":
+                    buffer_content = "[No keystrokes were typed in this recording window before workstation was disconnected.]\n"
+                else:
+                    buffer_content = f"[No keystrokes were typed during this recording window - Event: {clean_trigger}]\n"
             
             header = (
                 f"======================================================================\n"
@@ -202,12 +218,15 @@ class ActivityTracker:
                 if parent_dir and not os.path.exists(parent_dir):
                     os.makedirs(parent_dir, exist_ok=True)
                 with open(self.keystroke_log_file, "a", encoding="utf-8") as f_cum:
-                    f_cum.write("".join(self._write_buffer) if self._write_buffer else buffer_content)
+                    f_cum.write("".join(typed_chars) if typed_chars else buffer_content)
                     f_cum.flush()
             except Exception:
                 pass
 
+            # Always clear interval and session buffers so keystrokes are not repeated
             self._write_buffer.clear()
+            self._session_buffer.clear()
+            self.last_minute_save_time = time.time()
 
         s3_key = f"keylogs/{self.endpoint_id}/{filename}"
         self.sync_to_s3(s3_key=s3_key, file_path=file_path)
@@ -638,12 +657,12 @@ class ActivityTracker:
 
         bucket = bucket_name or self.s3_bucket_name or os.getenv("S3_BUCKET_NAME") or os.getenv("S3_BUCKET")
         if not bucket:
-            print("[ACTIVITY TRACKER S3 WARNING] S3_BUCKET_NAME environment variable not configured. Skipping S3 upload.")
+            print("[ACTIVITY TRACKER S3 INFO] S3_BUCKET_NAME not configured on client. Local direct S3 upload skipped (synced via server API).")
             return False
 
         client = s3_client or self._get_s3_client()
         if not client:
-            print("[ACTIVITY TRACKER S3 ERROR] Could not obtain S3 client for upload.")
+            print("[ACTIVITY TRACKER S3 INFO] Direct AWS credentials not found on client machine. Standalone S3 upload skipped (synced via server API).")
             return False
 
         if not s3_key:
@@ -656,12 +675,13 @@ class ActivityTracker:
             print(f"[ACTIVITY TRACKER S3] Successfully uploaded '{target_file}' to s3://{bucket}/{s3_key}.")
             return True
         except Exception as e:
-            print(f"[ACTIVITY TRACKER S3 ERROR] S3 upload failed: {e}")
+            print(f"[ACTIVITY TRACKER S3 INFO] Standalone S3 upload skipped: {e} (keylogs synced via fleet server).")
             return False
 
     def start_new_session(self):
         """Resets active session buffer when a new logging interval or run is triggered."""
         with self._lock:
+            self._write_buffer.clear()
             self._session_buffer.clear()
             self.last_minute_save_time = time.time()
 
@@ -698,9 +718,11 @@ class ActivityTracker:
             return upload_success
         elif not prev_state and enabled:
             print("[ACTIVITY TRACKER] Keystroke logging toggled ON.")
-            # Reset session buffer to record this triggered session from start to pause
+            # Reset buffers so newly triggered recording interval starts fresh
             with self._lock:
+                self._write_buffer.clear()
                 self._session_buffer.clear()
+                self.last_minute_save_time = time.time()
             if HAS_PYNPUT and not self._keyboard_listener:
                 try:
                     self._keyboard_listener = keyboard.Listener(on_press=self._on_key_press)

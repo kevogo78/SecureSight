@@ -263,7 +263,7 @@ def test_set_keystrokes_enabled_toggles_and_syncs(tmp_path):
 
 
 def test_snapshot_naming_and_session_buffer(tmp_path, monkeypatch):
-    """Verify that snapshot filenames use <endpoint_name>_<YYYYMMDD_HHMMSS>_<trigger>.txt and retain full typing."""
+    """Verify that snapshot filenames use <endpoint_name>_<YYYYMMDD_HHMMSS>_<trigger>.txt, clear buffers per interval, and show explicit messages when no keys are typed."""
     tracker = ActivityTracker(
         poll_interval=0.1, 
         enable_keystrokes=True,
@@ -273,12 +273,12 @@ def test_snapshot_naming_and_session_buffer(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     with patch.object(tracker, "sync_to_s3", return_value=True):
-        # 1. Type several characters
+        # 1. Type characters in interval 1
         tracker._append_to_audit_log("H")
         tracker._append_to_audit_log("i")
         tracker._append_to_audit_log(" ")
 
-        # 2. 1-minute interval snapshot
+        # 2. 1-minute interval snapshot for interval 1
         snap1 = tracker.save_snapshot_to_file(reason="1-minute-interval")
         assert snap1 is not None
         assert "WORKSTATION-WIN11_" in snap1
@@ -288,7 +288,16 @@ def test_snapshot_naming_and_session_buffer(tmp_path, monkeypatch):
             assert "Hi " in content1
             assert "TRIGGER EVENT: 1-MIN" in content1
 
-        # 3. Type more characters (typing continuous from trigger)
+        # 3. Interval 2: No keys are typed during this minute
+        snap2 = tracker.save_snapshot_to_file(reason="1-min")
+        assert snap2 is not None
+        with open(snap2, "r", encoding="utf-8") as f:
+            content2 = f.read()
+            # Does NOT repeat interval 1's keystrokes
+            assert "Hi " not in content2
+            assert "[No keystrokes were typed during this 1-minute recording interval.]" in content2
+
+        # 4. Type characters before pause
         tracker._append_to_audit_log("there!")
         snap_pause = tracker.save_snapshot_to_file(reason="pause")
         assert snap_pause is not None
@@ -296,13 +305,17 @@ def test_snapshot_naming_and_session_buffer(tmp_path, monkeypatch):
         assert "_pause.txt" in snap_pause
         with open(snap_pause, "r", encoding="utf-8") as f:
             content_pause = f.read()
-            # Full typing from trigger until pause is preserved!
-            assert "Hi there!" in content_pause
+            assert "there!" in content_pause
+            # Previous intervals are not repeated
+            assert "Hi " not in content_pause
             assert "TRIGGER EVENT: PAUSE" in content_pause
 
-        # 4. End session
+        # 5. End session with no typing since pause
         snap_end = tracker.save_snapshot_to_file(reason="end-session")
         assert "_end-session.txt" in snap_end
+        with open(snap_end, "r", encoding="utf-8") as f:
+            content_end = f.read()
+            assert "[No keystrokes were typed in this recording window before monitoring ended.]" in content_end
 
 
 
