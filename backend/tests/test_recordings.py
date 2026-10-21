@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-with patch('psycopg2.pool.SimpleConnectionPool'), patch('boto3.client'):
+with patch('psycopg2.pool.ThreadedConnectionPool'), patch('psycopg2.pool.SimpleConnectionPool'), patch('boto3.client'):
     from src.routes import recordings, auth
 
 RID = '12345678-1234-1234-1234-123456789abc'

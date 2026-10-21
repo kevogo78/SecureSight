@@ -35,7 +35,7 @@ export default function LoginPage({ onLogin }) {
           <img src="/branding/securesight-logo.png" alt="SecureSight — Visibility. Security. Control." className="w-full max-w-sm h-auto mb-3" />
           <h1 className="sr-only">SecureSight Administrator Portal</h1>
           <p className="text-xs font-semibold text-emerald-400/90 mt-1 uppercase tracking-wider">
-            ITEC 4810 Capstone â€¢ Administrator Portal
+            ITEC 4810 Capstone • Administrator Portal
           </p>
           <p className="text-xs text-slate-400 mt-2">
             Sign in with authorized administrator credentials to manage fleet endpoints and review privacy telemetry.
@@ -118,7 +118,7 @@ export default function LoginPage({ onLogin }) {
         {/* Security Notice */}
         <div className="mt-6 pt-5 border-t border-slate-800 text-center">
           <p className="text-[11px] text-slate-500">
-            Protected endpoint gateway â€¢ Role-Based Access Control enforced
+            Protected endpoint gateway • Role-Based Access Control enforced
           </p>
         </div>
       </div>

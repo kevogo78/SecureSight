@@ -6,18 +6,32 @@ const apiTarget = process.env.API_PROXY_TARGET || 'http://127.0.0.1:8000';
 
 export default defineConfig({
   plugins: [react()],
-  base: '/', // Ensure base is set to root
+  base: '/',
+  build: {
+    chunkSizeWarningLimit: 800,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-core': ['react', 'react-dom'],
+          'charts': ['recharts'],
+          'icons': ['lucide-react'],
+        }
+      }
+    }
+  },
   server: {
     port: 5173,
     proxy: {
       '/api': {
         target: apiTarget,
         changeOrigin: true,
+        secure: false,
       },
       '/health': {
         target: apiTarget,
         changeOrigin: true,
-      },
+        secure: false,
+      }
     }
   }
 });

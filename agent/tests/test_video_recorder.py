@@ -79,7 +79,9 @@ def test_orchestrator_checks_raw_title_and_respects_pause():
     agent = AgentOrchestrator.__new__(AgentOrchestrator)
     agent.stopping = False
     agent.is_suspended = False
+    agent.sensitive_cooldown_until = 0.0
     agent.tracker = MagicMock()
+    agent.tracker.is_sensitive_active.return_value = (False, 'Clean')
     agent.tracker.get_active_window.return_value = {
         'app_name': 'notepad.exe', 'window_title_raw': 'password=private',
         'window_title_sanitized': 'password=[REDACTED_SECRET]',
@@ -94,3 +96,18 @@ def test_orchestrator_checks_raw_title_and_respects_pause():
     agent.is_suspended = False
     agent.tracker.get_active_window.return_value['app_name'] = 'Unknown'
     assert not agent.recording_allowed()
+
+
+def test_recording_respects_merged_keylogger_dlp_cooldown():
+    from src.main import AgentOrchestrator
+    agent = AgentOrchestrator.__new__(AgentOrchestrator)
+    agent.stopping = False
+    agent.is_suspended = False
+    agent.sensitive_cooldown_until = float('inf')
+    agent.tracker = MagicMock()
+    assert not agent.recording_allowed()
+    agent.tracker.get_active_window.assert_not_called()
+    agent.sensitive_cooldown_until = 0.0
+    agent.tracker.is_sensitive_active.return_value = (True, 'DLP_Credential')
+    assert not agent.recording_allowed()
+    agent.tracker.get_active_window.assert_not_called()

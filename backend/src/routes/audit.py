@@ -21,7 +21,7 @@ def fetch_recent_logs(limit: int = 50):
                            a.cpu_percent, a.ram_percent, a.activity_state, a.app_category,
                            COALESCE(e.hostname, 'WORKSTATION-' || a.endpoint_id) as hostname,
                            COALESCE(e.os_type, 'Windows 11 Enterprise') as os_type,
-                           m.capture_id
+                           m.capture_id, a.website_url
                     FROM audit_logs a
                     LEFT JOIN media_captures m ON a.log_id = m.log_id
                     LEFT JOIN endpoints e ON a.endpoint_id = e.endpoint_id
@@ -42,13 +42,15 @@ def fetch_recent_logs(limit: int = 50):
                         "keystrokes": r[4],
                         "filter_status": r[5],
                         "dlp_flag": r[6],
+                        "capture_id": r[14],
                         "media_url": media_url,
                         "cpu_percent": r[8] if r[8] is not None else 0.0,
                         "ram_percent": r[9] if r[9] is not None else 0.0,
                         "activity_state": r[10] or "Active",
                         "app_category": r[11] or "Development",
                         "hostname": r[12],
-                        "os_type": r[13]
+                        "os_type": r[13],
+                        "website_url": r[15] if len(r) > 15 else None
                     })
                 if len(results) > 0:
                     return results

@@ -33,7 +33,14 @@ sudo cp -r dist/* "$WEB_ROOT"/
 
 echo "=== [5/5] Restarting System Services ==="
 sudo systemctl daemon-reload
-sudo systemctl restart monitor-api
+# Restart the active systemd service (endpoint-api or monitor-api fallback)
+if systemctl is-active --quiet endpoint-api || systemctl is-enabled --quiet endpoint-api 2>/dev/null; then
+    sudo systemctl restart endpoint-api
+elif systemctl is-active --quiet monitor-api || systemctl is-enabled --quiet monitor-api 2>/dev/null; then
+    sudo systemctl restart monitor-api
+else
+    sudo systemctl restart endpoint-api
+fi
 sudo systemctl restart nginx
 
 echo "=== Deployment Successfully Completed ==="

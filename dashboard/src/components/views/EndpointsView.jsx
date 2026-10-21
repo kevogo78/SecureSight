@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Monitor, Radio, Power, Pause, Play, ShieldCheck, UserCheck, 
-  UserX, Clock, History, LayoutDashboard, AlertCircle, Eye 
+  UserX, Clock, History, LayoutDashboard, AlertCircle, Eye,
+  Settings2, Fingerprint, Trash2, X, CheckCircle2, Save, Link2
 } from 'lucide-react';
+import { fetchEndpointHistoryApi } from '../../services/api';
 
 export default function EndpointsView({ 
   endpoints = [], 
   onSelectEndpoint, 
   onKickEndpoint, 
   onTogglePauseEndpoint,
+  onUpdateEndpoint,
+  onDeleteEndpoint,
   logs = [],
   initialViewMode = 'all'
 }) {
@@ -17,6 +21,98 @@ export default function EndpointsView({
   const [statusFilter, setStatusFilter] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
+  const [feedback, setFeedback] = useState(null);
+
+  // Edit Options Modal State
+  const [editingEndpoint, setEditingEndpoint] = useState(null);
+  const [editForm, setEditForm] = useState({
+    display_name: '',
+    mac_address: '',
+    device_fingerprint: '',
+    user: ''
+  });
+  const [endpointHistory, setEndpointHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const handleOpenEditModal = async (ep) => {
+    setEditingEndpoint(ep);
+    setEditForm({
+      display_name: ep.custom_name || ep.name || ep.hostname || '',
+      mac_address: ep.mac_address || '',
+      device_fingerprint: ep.device_fingerprint || '',
+      user: ep.user || ''
+    });
+    setConfirmDelete(false);
+    setLoadingHistory(true);
+    try {
+      const history = await fetchEndpointHistoryApi(ep.endpoint_id);
+      setEndpointHistory(history);
+    } catch {
+      setEndpointHistory([]);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleSaveEdit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!editingEndpoint) return;
+    setIsSaving(true);
+    try {
+      if (onUpdateEndpoint) {
+        await onUpdateEndpoint(editingEndpoint.endpoint_id, editForm);
+      }
+      setFeedback({
+        type: 'success',
+        message: `Endpoint configuration updated and device identifiers successfully linked!`
+      });
+      // Refresh connection history with updated links
+      try {
+        const updatedHistory = await fetchEndpointHistoryApi(editingEndpoint.endpoint_id);
+        setEndpointHistory(updatedHistory);
+      } catch {}
+      setTimeout(() => {
+        setEditingEndpoint(null);
+        setFeedback(null);
+      }, 1600);
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        message: err.message || 'Failed to update endpoint configuration.'
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteEndpointConfirm = async () => {
+    if (!editingEndpoint) return;
+    setIsDeleting(true);
+    try {
+      if (onDeleteEndpoint) {
+        await onDeleteEndpoint(editingEndpoint.endpoint_id);
+      }
+      setFeedback({
+        type: 'success',
+        message: `Endpoint "${editingEndpoint.name}" was safely removed from the database.`
+      });
+      setTimeout(() => {
+        setEditingEndpoint(null);
+        setFeedback(null);
+        setConfirmDelete(false);
+      }, 1500);
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        message: err.message || 'Failed to delete endpoint.'
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   useEffect(() => {
     if (initialViewMode) {
@@ -76,6 +172,27 @@ export default function EndpointsView({
 
   return (
     <div className="p-8 space-y-6 font-sans">
+      {/* Verification Feedback Banner */}
+      {feedback && !editingEndpoint && (
+        <div className={`p-4 rounded-xl border flex items-center justify-between text-sm shadow-sm transition ${
+          feedback.type === 'success' 
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+            : 'bg-red-50 border-red-200 text-red-800'
+        }`}>
+          <div className="flex items-center gap-2">
+            {feedback.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+            )}
+            <span className="font-semibold">{feedback.message}</span>
+          </div>
+          <button onClick={() => setFeedback(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div 
@@ -155,7 +272,7 @@ export default function EndpointsView({
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              {viewMode === 'connected' && 'Workstations currently streaming live telemetry and responsive to heartbeats.'}
+              {viewMode === 'connected' && 'Workstations currently reporting active telemetry and responsive to heartbeats.'}
               {viewMode === 'offline' && 'Past workstations that granted consent with recorded telemetry and connection history.'}
               {viewMode === 'all' && 'Overview of all consented workstations across active and historical states.'}
             </p>
@@ -298,6 +415,12 @@ export default function EndpointsView({
                             <div>
                               <div className="font-bold text-slate-900">{ep.name}</div>
                               <div className="text-[10px] text-slate-400 font-mono">ID: {ep.endpoint_id}</div>
+                              {ep.mac_address && (
+                                <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1 mt-0.5" title={`Hardware MAC: ${ep.mac_address}`}>
+                                  <Fingerprint className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                                  <span>{ep.mac_address}</span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -402,6 +525,15 @@ export default function EndpointsView({
                               <span>{viewMode === 'offline' ? 'History' : 'View'}</span>
                             </button>
 
+                            <button
+                              onClick={() => handleOpenEditModal(ep)}
+                              className="px-2.5 py-1 bg-slate-50 text-slate-700 hover:bg-slate-100 rounded-lg font-semibold text-xs transition cursor-pointer border border-slate-200 flex items-center gap-1"
+                              title="Edit Endpoint Options & Device Linking"
+                            >
+                              <Settings2 className="w-3 h-3 text-slate-500" />
+                              <span>Edit</span>
+                            </button>
+
                             {!isOffline && (
                               <button
                                 onClick={() => onTogglePauseEndpoint && onTogglePauseEndpoint(ep.endpoint_id)}
@@ -474,6 +606,286 @@ export default function EndpointsView({
           </>
         )}
       </div>
+
+      {/* Edit Options Modal */}
+      {editingEndpoint && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden my-8">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-100 text-emerald-800 rounded-xl">
+                  <Settings2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Endpoint Configuration &amp; Device Linking
+                  </h3>
+                  <div className="text-xs text-slate-500 font-mono mt-0.5">
+                    Endpoint ID #{editingEndpoint.endpoint_id} &bull; Hostname: {editingEndpoint.hostname || editingEndpoint.name}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => { setEditingEndpoint(null); setFeedback(null); }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition cursor-pointer"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Feedback Alert */}
+            {feedback && (
+              <div className={`mx-6 mt-4 p-3.5 rounded-xl border flex items-center gap-2.5 text-xs font-semibold ${
+                feedback.type === 'success' 
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                  : 'bg-red-50 border-red-200 text-red-800'
+              }`}>
+                {feedback.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                )}
+                <span>{feedback.message}</span>
+              </div>
+            )}
+
+            {/* Modal Form Content */}
+            <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto text-xs">
+              {/* Basic Details */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  General Information
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Display / Friendly Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.display_name}
+                      onChange={(e) => setEditForm(f => ({ ...f, display_name: e.target.value }))}
+                      placeholder="e.g. Finance-Laptop-01"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-slate-800 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Assigned User
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.user}
+                      onChange={(e) => setEditForm(f => ({ ...f, user: e.target.value }))}
+                      placeholder="e.g. John Doe"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-slate-800 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Physical Hardware Identifiers */}
+              <div className="space-y-4 pt-2 border-t border-slate-100">
+                <div className="flex items-center gap-2">
+                  <Fingerprint className="w-4 h-4 text-emerald-600" />
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Physical Hardware Identification &amp; Re-linking
+                  </h4>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Logins across different accounts or re-registrations from this same physical machine are automatically unified and linked together via persistent device fingerprint and network adapter MAC address.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      MAC Address
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.mac_address}
+                      onChange={(e) => setEditForm(f => ({ ...f, mac_address: e.target.value }))}
+                      placeholder="00:1A:2B:3C:4D:5E"
+                      className="w-full px-3 py-2 font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-slate-800 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Device Fingerprint
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.device_fingerprint}
+                      onChange={(e) => setEditForm(f => ({ ...f, device_fingerprint: e.target.value }))}
+                      placeholder="SHA256 hardware identifier"
+                      className="w-full px-3 py-2 font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-slate-800 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Linked Physical Machine Connection History */}
+              <div className="space-y-3 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <History className="w-4 h-4 text-slate-600" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Linked Physical Device Connection History
+                    </h4>
+                  </div>
+                  <span className="text-[10px] font-semibold text-slate-400">
+                    {endpointHistory.length} recorded session{endpointHistory.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+
+                {loadingHistory ? (
+                  <div className="py-6 text-center text-slate-400 flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-slate-300 border-t-emerald-600 rounded-full animate-spin" />
+                    <span>Loading connection history...</span>
+                  </div>
+                ) : endpointHistory.length === 0 ? (
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-slate-500 text-xs">
+                    No historical sessions found for this physical device.
+                  </div>
+                ) : (
+                  <div className="border border-slate-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                    <table className="w-full text-left border-collapse text-[11px]">
+                      <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 sticky top-0">
+                        <tr>
+                          <th className="py-2 px-3">Session Time</th>
+                          <th className="py-2 px-3">User</th>
+                          <th className="py-2 px-3">IP Address</th>
+                          <th className="py-2 px-3">Status</th>
+                          <th className="py-2 px-3">Linked By</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {endpointHistory.map((item, idx) => {
+                          const isFpMatch = item.device_fingerprint && editForm.device_fingerprint && item.device_fingerprint === editForm.device_fingerprint;
+                          const isMacMatch = item.mac_address && editForm.mac_address && item.mac_address.toLowerCase() === editForm.mac_address.toLowerCase();
+
+                          return (
+                            <tr key={item.connection_id || idx} className="hover:bg-slate-50">
+                              <td className="py-2 px-3 font-mono text-slate-600 whitespace-nowrap">
+                                {item.connected_at ? new Date(item.connected_at).toLocaleString() : 'Recent'}
+                              </td>
+                              <td className="py-2 px-3 font-medium text-slate-800">
+                                {item.username || `User #${item.user_id || 1}`}
+                              </td>
+                              <td className="py-2 px-3 font-mono text-slate-600">
+                                {item.ip_address || '127.0.0.1'}
+                              </td>
+                              <td className="py-2 px-3">
+                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                  (item.status || '').toLowerCase().includes('online') 
+                                    ? 'bg-emerald-50 text-emerald-700' 
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {item.status || 'Active'}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3">
+                                <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full font-mono">
+                                  <Link2 className="w-2.5 h-2.5 text-slate-400" />
+                                  {isFpMatch ? 'Fingerprint' : isMacMatch ? 'MAC' : 'Endpoint ID'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Danger Zone: Safe Deletion */}
+              <div className="pt-4 border-t border-red-100">
+                <div className="p-4 bg-red-50/60 border border-red-200 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-red-900 text-xs flex items-center gap-1.5">
+                        <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                        <span>Safely Remove Endpoint from Database</span>
+                      </div>
+                      <p className="text-[11px] text-red-700/80 mt-0.5">
+                        Deletes endpoint record and cascades removal of associated telemetry and audit logs.
+                      </p>
+                    </div>
+
+                    {!confirmDelete ? (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(true)}
+                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-xs transition cursor-pointer shadow-sm"
+                      >
+                        Delete Endpoint
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {confirmDelete && (
+                    <div className="p-3 bg-red-100/70 border border-red-300 rounded-lg flex items-center justify-between gap-4">
+                      <div className="text-[11px] font-semibold text-red-900">
+                        Confirm permanent deletion of "{editingEndpoint.name}"?
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(false)}
+                          disabled={isDeleting}
+                          className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 rounded border border-slate-300 text-xs font-semibold cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDeleteEndpointConfirm}
+                          disabled={isDeleting}
+                          className="px-3 py-1 bg-red-700 hover:bg-red-800 text-white rounded text-xs font-bold cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {isDeleting ? 'Deleting...' : 'Yes, Delete'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => { setEditingEndpoint(null); setFeedback(null); }}
+                disabled={isSaving || isDeleting}
+                className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl font-semibold text-xs transition cursor-pointer disabled:opacity-50"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={isSaving || isDeleting}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition cursor-pointer shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isSaving ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Saving Changes...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Save &amp; Link Endpoint</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

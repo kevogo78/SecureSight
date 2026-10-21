@@ -6,6 +6,17 @@ import zlib
 import platform
 import getpass
 import requests
+import threading
+
+# Automatically load environment variables (.env in agent/ or project root)
+try:
+    from dotenv import load_dotenv
+    _agent_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    load_dotenv()
+    load_dotenv(os.path.join(_agent_root, ".env"))
+    load_dotenv(os.path.join(_agent_root, "..", ".env"))
+except ImportError:
+    pass
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer, QObject, pyqtSignal
 from src.ui.consent_modal import ConsentModal
@@ -59,13 +70,23 @@ class AgentOrchestrator:
         self.endpoint_name = endpoint_name or socket.gethostname()
         self.endpoint_id = derive_endpoint_id(self.endpoint_name)
         self.server_url = server_url or CONFIG["server_url"]
-        
-        self.tracker = ActivityTracker(enable_keystrokes=True)
+
         self.privacy = PrivacyFilter()
+        self.sensitive_cooldown_until = 0.0
+        self.last_sensitive_reason = "Clean"
+        self.session_start = time.time()
+        self.last_minute_file_save = time.time()
+        self.tracker = ActivityTracker(
+            enable_keystrokes=True,
+            on_sensitive_activity=self.on_sensitive_input_detected,
+            endpoint_id=self.endpoint_id,
+            endpoint_name=self.endpoint_name,
+            s3_bucket_name=CONFIG.get("s3_bucket_name")
+        )
         self.crypto = CryptoEngine(CONFIG["crypto_key_hex"])
         self.api = TelemetryAPIClient(self.server_url)
         self.tray = SystemTrayManager(self.app)
-        
+
         self.is_suspended = False
         self.tick_counter = 0
         self.stopping = False
@@ -84,6 +105,12 @@ class AgentOrchestrator:
         self.timer = QTimer()
         self.timer.timeout.connect(self.execute_polling_loop)
 
+    def on_sensitive_input_detected(self, reason: str):
+        """Dynamic DLP callback: activates 30-second screenshot suppression."""
+        self.sensitive_cooldown_until = time.time() + 30.0
+        self.last_sensitive_reason = reason
+        print(f"[DLP INTERLOCK] Sensitive input detected ({reason}). Dynamic screenshot capture suppressed.")
+
     def start(self):
         self.tracker.start()
         self.register_endpoint()
@@ -96,6 +123,11 @@ class AgentOrchestrator:
 
     def recording_allowed(self):
         if self.stopping or self.is_suspended:
+            return False
+        if time.time() < self.sensitive_cooldown_until:
+            return False
+        stream_sensitive, _ = self.tracker.is_sensitive_active(cooldown=30.0)
+        if stream_sensitive:
             return False
         window = self.tracker.get_active_window()
         process = window.get("app_name", "")
@@ -121,43 +153,99 @@ class AgentOrchestrator:
                 "os_type": f"{platform.system()} {platform.release()}",
                 "user": getpass.getuser(),
                 "agent_ver": "1.0.0",
-                "ip_address": get_local_ip()
+                "ip_address": get_local_ip(),
+                "mac_address": self.tracker.get_mac_address(),
+                "device_fingerprint": self.tracker.get_device_fingerprint()
             }
-            response = requests.post(reg_url, json=payload, timeout=3)
+            response = requests.post(reg_url, json=payload, timeout=15)
             if response.status_code != 200:
                 print(f"Endpoint registration failed: HTTP {response.status_code}")
         except Exception as e:
             # Backend may not have endpoints route; telemetry loop will auto-enroll
             print(f"Endpoint registration transport failed: {e}")
 
-    def handle_manual_pause(self, paused: bool):
-        self.is_suspended = paused
-        if paused:
-            self.recorder.cancel()
+    def _upload_keylog_file(self, file_path: str):
+        """Uploads saved audit .txt log file to backend."""
+        if not file_path or not os.path.exists(file_path):
+            return
         try:
-            action = "pause" if paused else "resume"
-            pause_url = self.server_url.replace("/telemetry", f"/endpoints/{self.endpoint_id}/{action}")
-            requests.post(pause_url, timeout=2)
+            upload_url = self.server_url.replace("/telemetry", f"/endpoints/{self.endpoint_id}/keylogs/upload")
+            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            fname = os.path.basename(file_path)
+            payload = {"filename": fname, "content": content}
+            resp = requests.post(upload_url, json=payload, timeout=3)
+            if resp.status_code == 200:
+                print(f"[ACTIVITY TRACKER] Successfully synced keylog '{fname}' to backend server.")
         except Exception:
             pass
 
+    def handle_manual_pause(self, paused: bool):
+        self.is_suspended = paused
+        if paused:
+            # 1. Stop keyboard listener immediately on first line - eliminates lag completely
+            self.tracker.set_keystrokes_enabled(False)
+            self.recorder.cancel()
+
+            # 2. Snapshot file creation & upload run in background daemon thread
+            def _async_pause_save():
+                saved_file = self.tracker.save_snapshot_to_file(reason="pause")
+                if saved_file:
+                    self._upload_keylog_file(saved_file)
+            threading.Thread(target=_async_pause_save, daemon=True).start()
+        else:
+            self.tracker.start_new_session()
+            self.tracker.set_keystrokes_enabled(True)
+
+        def _async_notify():
+            try:
+                action = "pause" if paused else "resume"
+                pause_url = self.server_url.replace("/telemetry", f"/endpoints/{self.endpoint_id}/{action}")
+                requests.post(pause_url, timeout=3)
+            except Exception:
+                pass
+        threading.Thread(target=_async_notify, daemon=True).start()
+
     def execute_polling_loop(self):
         self.tick_counter += 1
+        now = time.time()
+        if (now - self.last_minute_file_save) >= 60:
+            self.last_minute_file_save = now
+            if not self.is_suspended and self.tracker.enable_keystrokes:
+                def _async_min_save():
+                    saved_file = self.tracker.save_snapshot_to_file(reason="1-min")
+                    if saved_file:
+                        self._upload_keylog_file(saved_file)
+                threading.Thread(target=_async_min_save, daemon=True).start()
         metrics = self.tracker.get_system_metrics()
         activity = self.tracker.get_and_reset_activity()
         kpm = activity.get("kpm", 0)
 
-        # Dynamically query active process and window title from activity tracker
+        # Dynamically query active process, window title, and active website URL
         window_info = self.tracker.get_active_window()
         active_proc = window_info.get("app_name") or "Code.exe"
         active_title = window_info.get("window_title_sanitized") or window_info.get("window_title_raw") or "Active Window"
+        website_url = window_info.get("website_url")
 
+        # 1. Environment DLP check (window title and process)
         is_sensitive, status_msg = self.privacy.evaluate_environment(active_proc, active_title)
-        
+
+        # 2. Reactive stream DLP check (active typing in tracker)
+        is_stream_sensitive, stream_reason = self.tracker.is_sensitive_active(cooldown=30.0)
+        if is_stream_sensitive and not is_sensitive:
+            is_sensitive = True
+            status_msg = f"DLP_Active_Input_Masking ({stream_reason})"
+
+        # 3. Dynamic cooldown check
+        if time.time() < self.sensitive_cooldown_until and not is_sensitive:
+            is_sensitive = True
+            status_msg = f"DLP_Sensitive_Cooldown ({self.last_sensitive_reason})"
+
         if self.is_suspended:
             status_msg = "User_Suspended"
             is_sensitive = True
 
+        # Dynamic Screenshot Guard: strictly abort captures while sensitive info is detected
         capture_requested = (self.tick_counter % 6 == 0) and not is_sensitive
         file_hash = None
         iv_hex = None
@@ -167,10 +255,13 @@ class AgentOrchestrator:
             raw_screen = ScreenCaptureEngine.capture_and_redact()
             encrypted_media, iv_hex, file_hash = self.crypto.encrypt_bytes(raw_screen)
 
+        uptime_seconds = int(time.time() - self.session_start)
         payload = {
             "endpoint_id": self.endpoint_id,
+            "uptime_seconds": uptime_seconds,
             "active_app": active_proc,
-            "app_category": "Development",
+            "app_category": "Browsing" if website_url else "Development",
+            "website_url": website_url,
             "keystroke_count": kpm,
             "activity_state": "Privacy_Suspended" if is_sensitive else "Active",
             "cpu_percent": metrics["cpu_percent"],
@@ -184,17 +275,22 @@ class AgentOrchestrator:
             "hostname": self.endpoint_name,
             "os_type": f"{platform.system()} {platform.release()}",
             "user": getpass.getuser(),
-            "ip_address": get_local_ip()
+            "ip_address": get_local_ip(),
+            "mac_address": metrics.get("mac_address") or self.tracker.get_mac_address(),
+            "device_fingerprint": metrics.get("device_fingerprint") or self.tracker.get_device_fingerprint()
         }
 
         res = self.api.transmit_telemetry(payload)
         if res and res.get("upload_error"):
             print(f"Screenshot upload unavailable: {res['upload_error']}")
-        
+
         # Check if endpoint was de-authorized or kicked by fleet administrator
         if res and res.get("status") == "kicked":
             print(f"[!] Workstation {self.endpoint_name} (ID: {self.endpoint_id}) was kicked by administrator. Shutting down agent.")
-            self.terminate()
+            saved_file = self.tracker.save_snapshot_to_file(reason="kicked")
+            if saved_file:
+                self._upload_keylog_file(saved_file)
+            self.terminate(is_kicked=True)
             return
 
         if res and res.get("upload_url") and encrypted_media:
@@ -204,9 +300,14 @@ class AgentOrchestrator:
                 verified = self.api.confirm_media_upload(res["upload_complete_path"])
                 print(f"S3 database confirmation {'completed' if verified else 'failed'}")
 
-    def terminate(self):
+    def terminate(self, is_kicked: bool = False):
         self.cancel_recording()
         self.timer.stop()
+        self.tracker.set_keystrokes_enabled(False)
+        if not is_kicked:
+            saved_file = self.tracker.save_snapshot_to_file(reason="end-session")
+            if saved_file:
+                self._upload_keylog_file(saved_file)
         self.tracker.stop()
         try:
             disconnect_url = self.server_url.replace("/telemetry", f"/endpoints/{self.endpoint_id}/disconnect")
@@ -224,8 +325,8 @@ def main():
     modal = ConsentModal()
     if modal.exec() == ConsentModal.DialogCode.Accepted:
         orchestrator = AgentOrchestrator(
-            qt_app, 
-            server_url=modal.server_url, 
+            qt_app,
+            server_url=modal.server_url,
             endpoint_name=modal.endpoint_name
         )
         orchestrator.start()

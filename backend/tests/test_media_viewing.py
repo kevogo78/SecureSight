@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 # Avoid contacting RDS or AWS during module import.
-with patch("psycopg2.pool.SimpleConnectionPool"), patch("boto3.client"):
+with patch("psycopg2.pool.ThreadedConnectionPool", create=True), patch("psycopg2.pool.SimpleConnectionPool", create=True), patch("boto3.client"):
     from src.routes import auth, media, audit
 
 

@@ -231,6 +231,7 @@ node_modules/
 
 # Secrets & Environment Variables
 .venv311/
+keystroke_audit.txt
 keystrokes_audit.txt
 .env
 *.pem
@@ -255,4 +256,10 @@ htmlcov/
 .pytest_cache/
 
 # Local Telemetry & Audit Logs
+*keystroke_audit.txt
 *keystrokes_audit.txt
+*keystroke*_audit.txt
+
+keylogs/
+agent/keylogs/
+backend/keylogs/

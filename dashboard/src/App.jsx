@@ -3,9 +3,9 @@ import LoginPage from './components/LoginPage';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import ScreenshotModal from './components/ScreenshotModal';
+import SessionPlayerModal from './components/SessionPlayerModal';
 import api from './services/api';
 import AddEndpointModal from './components/AddEndpointModal';
-import SessionPlayerModal from './components/SessionPlayerModal';
 
 import FleetOverviewView from './components/views/FleetOverviewView';
 import EndpointsView from './components/views/EndpointsView';
@@ -23,6 +23,8 @@ import {
   kickEndpointApi,
   pauseEndpointApi,
   resumeEndpointApi,
+  updateEndpointApi,
+  deleteEndpointApi,
   INITIAL_LOGS 
 } from './services/api';
 
@@ -65,8 +67,8 @@ export default function App() {
 
   // Modals
   const [activeCapture, setActiveCapture] = useState(null);
-  const [isAddEndpointOpen, setIsAddEndpointOpen] = useState(false);
   const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
+  const [isAddEndpointOpen, setIsAddEndpointOpen] = useState(false);
 
   // Polling loop: fetch endpoints and telemetry logs every 5 seconds when authenticated
   useEffect(() => {
@@ -209,10 +211,17 @@ export default function App() {
       saveConsentedEndpoints(remaining);
       return remaining;
     });
+    setLogs((prev) => prev.filter(l => String(l.endpoint_id) !== String(endpointId)));
     if (selectedEndpoint && String(selectedEndpoint.endpoint_id) === String(endpointId)) {
       setSelectedEndpoint(null);
       handleNavigate('endpoints', 'all');
     }
+  };
+
+  const handleDeleteScreenshots = (deletedLogIds) => {
+    if (!Array.isArray(deletedLogIds)) return;
+    const idSet = new Set(deletedLogIds.map(String));
+    setLogs((prev) => prev.filter(l => !idSet.has(String(l.log_id))));
   };
 
   const handleTogglePauseEndpoint = async (endpointId) => {
@@ -243,6 +252,59 @@ export default function App() {
       }
     } catch (e) {
       console.warn('Error syncing pause state with backend:', e);
+    }
+  };
+
+  const handleUpdateEndpoint = async (endpointId, updatedData) => {
+    try {
+      await updateEndpointApi(endpointId, updatedData);
+    } catch (e) {
+      console.warn('API update failed, applying locally:', e);
+    }
+    setEndpoints((prev) => {
+      const updated = prev.map(ep => {
+        if (String(ep.endpoint_id) === String(endpointId)) {
+          const newName = updatedData.display_name || updatedData.custom_name || ep.name;
+          return {
+            ...ep,
+            name: newName,
+            custom_name: newName,
+            mac_address: updatedData.mac_address || ep.mac_address,
+            device_fingerprint: updatedData.device_fingerprint || ep.device_fingerprint,
+            user: updatedData.user || ep.user
+          };
+        }
+        return ep;
+      });
+      saveConsentedEndpoints(updated);
+      return updated;
+    });
+
+    if (selectedEndpoint && String(selectedEndpoint.endpoint_id) === String(endpointId)) {
+      setSelectedEndpoint(prev => ({
+        ...prev,
+        name: updatedData.display_name || updatedData.custom_name || prev.name,
+        custom_name: updatedData.display_name || updatedData.custom_name || prev.custom_name,
+        mac_address: updatedData.mac_address || prev.mac_address,
+        device_fingerprint: updatedData.device_fingerprint || prev.device_fingerprint,
+        user: updatedData.user || prev.user
+      }));
+    }
+  };
+
+  const handleDeleteEndpoint = async (endpointId) => {
+    try {
+      await deleteEndpointApi(endpointId);
+    } catch (e) {
+      console.warn('API delete failed, removing locally:', e);
+    }
+    setEndpoints((prev) => {
+      const remaining = prev.filter(ep => String(ep.endpoint_id) !== String(endpointId));
+      saveConsentedEndpoints(remaining);
+      return remaining;
+    });
+    if (selectedEndpoint && String(selectedEndpoint.endpoint_id) === String(endpointId)) {
+      setSelectedEndpoint(null);
     }
   };
 
@@ -311,6 +373,8 @@ export default function App() {
               onSelectEndpoint={handleSelectEndpoint}
               onKickEndpoint={handleKickEndpoint}
               onTogglePauseEndpoint={handleTogglePauseEndpoint}
+              onUpdateEndpoint={handleUpdateEndpoint}
+              onDeleteEndpoint={handleDeleteEndpoint}
               logs={logs}
               initialViewMode={endpointsViewMode}
             />
@@ -322,8 +386,9 @@ export default function App() {
               onBack={() => handleNavigate('endpoints', 'all')}
               logs={logs}
               onViewScreenshot={setActiveCapture}
-              onViewRecording={() => setIsRecordingModalOpen(true)}
               onKickEndpoint={handleKickEndpoint}
+              onDeleteScreenshot={handleDeleteScreenshots}
+              onViewRecording={() => setIsRecordingModalOpen(true)}
             />
           )}
 

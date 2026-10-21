@@ -37,6 +37,17 @@ export const saveKickedEndpointId = (endpointId) => {
   }
 };
 
+export const removeKickedEndpointId = (endpointId) => {
+  try {
+    const current = getKickedEndpointIds();
+    const strId = String(endpointId);
+    const updated = current.filter(id => id !== strId);
+    localStorage.setItem('edmt_kicked_endpoints', JSON.stringify(updated));
+  } catch (e) {
+    console.warn('Failed to remove kicked endpoint ID:', e);
+  }
+};
+
 export const getConsentedEndpoints = () => {
   const kicked = getKickedEndpointIds();
   try {
@@ -111,13 +122,133 @@ export const resumeEndpointApi = async (endpointId) => {
   }
 };
 
-export const disconnectEndpointApi = async (endpointId) => {
+export const updateEndpointApi = async (endpointId, data) => {
   try {
-    await api.post(`/endpoints/${endpointId}/disconnect`);
+    const res = await api.put(`/endpoints/${endpointId}`, data);
+    // Update local consented cache
+    try {
+      const consented = getConsentedEndpoints();
+      const updated = consented.map(ep => {
+        if (String(ep.endpoint_id) === String(endpointId)) {
+          return {
+            ...ep,
+            name: data.display_name || data.custom_name || ep.name,
+            custom_name: data.display_name || data.custom_name || ep.custom_name,
+            mac_address: data.mac_address || ep.mac_address,
+            device_fingerprint: data.device_fingerprint || ep.device_fingerprint,
+            user: data.user || ep.user
+          };
+        }
+        return ep;
+      });
+      saveConsentedEndpoints(updated);
+    } catch (e) {
+      console.warn('Failed to update local consented cache:', e);
+    }
+    return res.data;
   } catch (e) {
-    console.info(`Endpoint ${endpointId} disconnected locally:`, e.message);
+    console.error(`Failed to update endpoint ${endpointId}:`, e);
+    throw e;
   }
 };
+
+export const deleteEndpointApi = async (endpointId) => {
+  try {
+    const res = await api.delete(`/endpoints/${endpointId}`);
+    // Clear kicked suppression so node can cleanly rejoin
+    removeKickedEndpointId(endpointId);
+    // Remove from local consented cache
+    try {
+      const consented = getConsentedEndpoints();
+      const remaining = consented.filter(ep => String(ep.endpoint_id) !== String(endpointId));
+      saveConsentedEndpoints(remaining);
+    } catch (e) {
+      console.warn('Failed to prune deleted endpoint from local cache:', e);
+    }
+    return res.data;
+  } catch (e) {
+    console.error(`Failed to delete endpoint ${endpointId}:`, e);
+    throw e;
+  }
+};
+
+export const fetchEndpointHistoryApi = async (endpointId) => {
+  try {
+    const res = await api.get(`/endpoints/${endpointId}/history`);
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (e) {
+    console.warn(`Failed to fetch connection history for endpoint ${endpointId}:`, e.message);
+    return [];
+  }
+};
+
+export const fetchEndpointKeylogsApi = async (endpointId) => {
+  try {
+    const res = await api.get(`/endpoints/${endpointId}/keylogs`);
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (e) {
+    console.warn(`Failed to fetch keylogs for endpoint ${endpointId}:`, e.message);
+    return [];
+  }
+};
+
+export const fetchKeylogContentApi = async (endpointId, filename) => {
+  try {
+    const res = await api.get(`/endpoints/${endpointId}/keylogs/${encodeURIComponent(filename)}`, {
+      responseType: 'text'
+    });
+    return res.data;
+  } catch (e) {
+    console.error(`Failed to fetch keylog content for ${filename}:`, e);
+    throw e;
+  }
+};
+
+export const deleteEndpointKeylogApi = async (endpointId, filename) => {
+  try {
+    const res = await api.delete(`/endpoints/${endpointId}/keylogs/${encodeURIComponent(filename)}`);
+    return res.data;
+  } catch (e) {
+    console.error(`Failed to delete keylog ${filename}:`, e);
+    throw e;
+  }
+};
+
+export const batchDeleteEndpointKeylogsApi = async (endpointId, filenames) => {
+  try {
+    const res = await api.post(`/endpoints/${endpointId}/keylogs/batch-delete`, { filenames });
+    return res.data;
+  } catch (e) {
+    console.error(`Failed to batch delete keylogs:`, e);
+    throw e;
+  }
+};
+
+export const deleteScreenshotApi = async (captureId, logId) => {
+  try {
+    if (captureId) {
+      const res = await api.delete(`/media/${captureId}`);
+      return res.data;
+    } else if (logId) {
+      const res = await api.delete(`/media/by-log/${logId}`);
+      return res.data;
+    }
+  } catch (e) {
+    console.error(`Failed to delete screenshot (capture: ${captureId}, log: ${logId}):`, e);
+    throw e;
+  }
+};
+
+export const batchDeleteScreenshotsApi = async ({ capture_ids = [], log_ids = [] }) => {
+  try {
+    const res = await api.post('/media/batch-delete', { capture_ids, log_ids });
+    return res.data;
+  } catch (e) {
+    console.error(`Failed to batch delete screenshots:`, e);
+    throw e;
+  }
+};
+
 
 export const fetchEndpoints = async () => {
   const kicked = getKickedEndpointIds();
@@ -173,6 +304,41 @@ export const checkBackendHealth = async () => {
       error: error.message
     };
   }
+};
+
+// ================= PRIVACY RULES ENGINE APIS =================
+
+export const fetchPrivacyRulesApi = async (category = null, enabledOnly = false) => {
+  try {
+    let url = '/privacy/rules?';
+    if (category) url += `category=${encodeURIComponent(category)}&`;
+    if (enabledOnly) url += `enabled_only=true`;
+    const res = await api.get(url);
+    return res.data;
+  } catch (e) {
+    console.warn('Privacy rules fetch warning:', e.message);
+    return [];
+  }
+};
+
+export const createPrivacyRuleApi = async (ruleData) => {
+  const res = await api.post('/privacy/rules', ruleData);
+  return res.data;
+};
+
+export const updatePrivacyRuleApi = async (ruleId, updates) => {
+  const res = await api.put(`/privacy/rules/${ruleId}`, updates);
+  return res.data;
+};
+
+export const deletePrivacyRuleApi = async (ruleId) => {
+  const res = await api.delete(`/privacy/rules/${ruleId}`);
+  return res.data;
+};
+
+export const testPrivacyRuleApi = async (testPayload) => {
+  const res = await api.post('/privacy/test', testPayload);
+  return res.data;
 };
 
 export default api;

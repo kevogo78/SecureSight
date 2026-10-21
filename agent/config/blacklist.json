@@ -4,15 +4,25 @@
     "keepass.exe",
     "bitwarden.exe",
     "nordpass.exe",
+    "lastpass.exe",
+    "dashlane.exe",
     "signal.exe",
-    "tor.exe"
+    "tor.exe",
+    "authenticator.exe"
   ],
   "blacklisted_window_titles": [
     "Sign In",
+    "Log In",
+    "Login",
     "Password",
     "Bank of America",
     "Chase Online",
     "Wells Fargo",
-    "Authentication Required"
+    "Capital One",
+    "Citibank",
+    "PayPal",
+    "Authentication Required",
+    "Two-Factor Authentication",
+    "2FA Verification"
   ]
 }

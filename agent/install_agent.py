@@ -29,7 +29,7 @@ WINDOWS_SPECIFIC = [
 ]
 
 def print_header(title: str):
-    bar = "=" * 65
+    bar = "=" * 68
     print(f"\n{bar}\n  {title}\n{bar}\n")
 
 def check_python_version():

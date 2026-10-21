@@ -41,7 +41,7 @@ class Login(BaseModel):
 
 
 @router.post("/login")
-def login(payload: Login, response: Response):
+def login(payload: Login, response: Response, request: Request):
     password = os.getenv("DASHBOARD_ADMIN_PASSWORD", "")
     if not password:
         raise HTTPException(503, "Administrator password is not configured")
@@ -50,9 +50,20 @@ def login(payload: Login, response: Response):
             and hmac.compare_digest(payload.password.encode(), password.encode())):
         raise HTTPException(401, "Invalid administrator credentials")
     value = f"{int(time.time()) + TTL}.{secrets.token_hex(16)}"
+
+    # Determine secure cookie flag:
+    # If DASHBOARD_COOKIE_SECURE is explicitly set, honor it.
+    # Otherwise auto-detect HTTPS request or X-Forwarded-Proto header (defaults to False on HTTP).
+    cookie_secure_env = os.getenv("DASHBOARD_COOKIE_SECURE")
+    if cookie_secure_env is not None:
+        cookie_secure = cookie_secure_env.lower() in ("true", "1", "yes")
+    else:
+        is_https = (request.url.scheme == "https") or (request.headers.get("x-forwarded-proto", "").lower() == "https")
+        cookie_secure = is_https
+
     response.set_cookie(COOKIE, f"{value}.{signature(value)}", max_age=TTL,
-                        httponly=True, samesite="strict", path="/api/v1",
-                        secure=os.getenv("DASHBOARD_COOKIE_SECURE", "true").lower() == "true")
+                        httponly=True, samesite="lax", path="/api/v1",
+                        secure=cookie_secure)
     response.headers["Cache-Control"] = "no-store"
     return {"username": expected_user, "displayName": "Administrator", "role": "System Administrator"}
 
