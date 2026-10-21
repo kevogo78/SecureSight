@@ -1,118 +1,93 @@
 import React, { useState, useEffect } from 'react';
-import { X, Play, Pause, RotateCcw, Volume2, ShieldCheck, Film, Clock, Monitor } from 'lucide-react';
+import { X, Film, RefreshCw } from 'lucide-react';
 
-export default function SessionPlayerModal({ isOpen, onClose, endpointName = 'WORKSTATION-WIN11' }) {
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [progress, setProgress] = useState(35);
-  const [speed, setSpeed] = useState(1);
-
+export default function SessionPlayerModal({ isOpen, onClose, endpointId, endpointName }) {
+  const [items, setItems] = useState([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [videoUrl, setVideoUrl] = useState(null);
+  const [error, setError] = useState('');
+  const [videoError, setVideoError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+  useEffect(() => { setItems([]); setSelectedId(''); }, [endpointId, isOpen]);
   useEffect(() => {
-    let interval;
-    if (isPlaying) {
-      interval = setInterval(() => {
-        setProgress((prev) => (prev >= 100 ? 0 : prev + 1));
-      }, 250 / speed);
-    }
-    return () => clearInterval(interval);
-  }, [isPlaying, speed]);
-
+    if (!isOpen) return;
+    const escape = (event) => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', escape);
+    return () => window.removeEventListener('keydown', escape);
+  }, [isOpen, onClose]);
+  useEffect(() => {
+    if (!isOpen || !endpointId) return;
+    const controller = new AbortController();
+    let pending = false;
+    const load = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const response = await fetch(`/api/v1/recordings?endpoint_id=${encodeURIComponent(endpointId)}`, { credentials: 'same-origin', signal: controller.signal });
+        if (!response.ok) {
+          const details = await response.json().catch(() => ({}));
+          throw new Error(details.detail || `Recordings unavailable (HTTP ${response.status}). Check backend deployment.`);
+        }
+        const records = await response.json();
+        if (!Array.isArray(records)) throw new Error('The recording API did not return a list.');
+        if (controller.signal.aborted) return;
+        setItems(records); setError('');
+        setSelectedId((previous) => records.some((item) => item.recording_id === previous) ? previous : records[0]?.recording_id || '');
+      } catch (failure) { if (!controller.signal.aborted) setError(failure.message); }
+      finally { pending = false; }
+    };
+    load();
+    const timer = setInterval(load, 10000);
+    return () => { controller.abort(); clearInterval(timer); };
+  }, [isOpen, endpointId, refresh]);
+  useEffect(() => {
+    setVideoUrl(null); setVideoError(''); setLoading(false);
+    if (!isOpen || !selectedId) return;
+    const controller = new AbortController();
+    let objectUrl;
+    setLoading(true);
+    fetch(`/api/v1/recordings/${selectedId}/video`, { credentials: 'same-origin', signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          const details = await response.json().catch(() => ({}));
+          throw new Error(details.detail || `Playback failed (HTTP ${response.status})`);
+        }
+        if (!response.headers.get('content-type')?.startsWith('video/mp4')) throw new Error('The server did not return an MP4.');
+        return response.blob();
+      }).then((blob) => {
+        if (!controller.signal.aborted) { objectUrl = URL.createObjectURL(blob); setVideoUrl(objectUrl); }
+      }).catch((failure) => { if (!controller.signal.aborted) setVideoError(failure.message); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [isOpen, selectedId]);
   if (!isOpen) return null;
-
+  const selected = items.find((item) => item.recording_id === selectedId);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-fadeIn font-sans">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm">
       <div className="fixed inset-0" onClick={onClose} />
-
-      <div className="relative z-10 w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/60">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              <Film className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-white">Encrypted Session Screen Stream</h3>
-              <p className="text-xs text-slate-400">Endpoint: {endpointName} • Stream Source: AWS S3 Encrypted Bucket</p>
-            </div>
+      <section role="dialog" aria-modal="true" aria-label="Video recordings" className="relative w-full max-w-4xl bg-slate-900 text-white border border-slate-700 rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+        <header className="flex items-center justify-between p-5 border-b border-slate-800">
+          <div className="flex gap-3 items-center"><Film className="w-6 h-6 text-emerald-400" /><div><h2 className="font-bold">Video Recordings</h2><p className="text-xs text-slate-400">{endpointName || 'Select an endpoint'} · Default screen · No audio</p></div></div>
+          <button onClick={onClose} aria-label="Close recordings"><X className="w-5 h-5" /></button>
+        </header>
+        <div className="p-5 space-y-4">
+          <div className="flex gap-3 items-center">
+            <select aria-label="Choose a recording" className="flex-1 min-w-0 bg-slate-800 rounded-lg p-2 text-sm" value={selectedId} onChange={(event) => setSelectedId(event.target.value)} disabled={!items.length}>
+              {!items.length && <option value="">No uploaded recordings</option>}
+              {items.map((item) => <option key={item.recording_id} value={item.recording_id}>{new Date(item.started_at).toLocaleString()} — {item.duration_seconds}s</option>)}
+            </select>
+            <button onClick={() => setRefresh((value) => value + 1)} aria-label="Refresh recordings" className="p-2 bg-slate-800 rounded-lg"><RefreshCw className="w-4 h-4" /></button>
           </div>
-          <button onClick={onClose} className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition">
-            <X className="w-5 h-5" />
-          </button>
+          {error && <p role="alert" className="text-sm text-amber-300">{error}</p>}
+          <div className="min-h-72 bg-black rounded-lg flex items-center justify-center">
+            {videoUrl && !videoError ? <video key={videoUrl} src={videoUrl} controls playsInline preload="metadata" className="w-full max-h-[55vh]" onError={() => setVideoError('This browser could not decode the recording.')} />
+              : <p role="status" className="p-8 text-sm text-slate-400 text-center">{loading ? 'Loading and decrypting recording…' : videoError || (error ? 'Recording list unavailable.' : 'No video yet. The agent records a 15-second clip after consent, then every 5 minutes.')}</p>}
+          </div>
+          {selected && <p className="text-xs text-slate-400">{selected.width} × {selected.height} · {selected.fps} FPS · {selected.duration_seconds} seconds · Encrypted in S3</p>}
+          <p className="text-xs text-slate-500">Recorded clips, not a live stream. List refreshes every 10 seconds. Capture stops on pause, revoke, or detected sensitive activity.</p>
         </div>
-
-        {/* Video Player Area */}
-        <div className="flex-1 bg-black relative flex items-center justify-center min-h-[380px] overflow-hidden">
-          <img
-            src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=1200&q=80"
-            alt="Session Frame"
-            className="w-full h-full object-cover opacity-90"
-          />
-
-          {/* Screen Privacy Redaction Simulation Overlay */}
-          <div className="absolute top-1/3 left-1/4 w-72 h-14 bg-black/95 border border-emerald-500/50 rounded-lg flex items-center justify-center text-xs font-mono text-emerald-400 gap-2 shadow-2xl backdrop-blur-md">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>[PRIVACY FILTER: REDACTED]</span>
-          </div>
-
-          <div className="absolute top-4 left-4 bg-slate-950/80 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 font-mono flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <span>S3 Chunk Stream: #{Math.floor(progress / 5) + 101}.enc</span>
-          </div>
-
-          <div className="absolute top-4 right-4 bg-slate-950/80 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-emerald-400 font-mono">
-            AES-256-GCM Hardware Decrypted
-          </div>
-        </div>
-
-        {/* Controls Bar */}
-        <div className="p-4 bg-slate-900 border-t border-slate-800 space-y-3">
-          {/* Scrubber */}
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] font-mono text-slate-400">00:{String(Math.floor(progress / 2)).padStart(2, '0')}</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={progress}
-              onChange={(e) => setProgress(Number(e.target.value))}
-              className="flex-1 accent-emerald-500 h-1 bg-slate-700 rounded-lg cursor-pointer"
-            />
-            <span className="text-[11px] font-mono text-slate-400">00:50</span>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setIsPlaying(!isPlaying)}
-                className="p-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg font-bold transition"
-              >
-                {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={() => setProgress(0)}
-                className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-              <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1 text-xs text-slate-300">
-                {[1, 2, 4].map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setSpeed(s)}
-                    className={`px-2 py-0.5 rounded font-bold ${speed === s ? 'bg-emerald-500 text-slate-950' : 'hover:text-white'}`}
-                  >
-                    {s}x
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="text-xs text-slate-400 flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Full DLP compliance active</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
   );
 }

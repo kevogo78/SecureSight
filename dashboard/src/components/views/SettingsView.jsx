@@ -25,17 +25,6 @@ export default function SettingsView() {
 
   const [keylogFilePath, setKeylogFilePath] = useState('agent/keystrokes_audit.txt');
 
-  const [recordSession, setRecordSession] = useState(() => {
-    try {
-      const stored = localStorage.getItem('edmt_record_session');
-      return stored !== 'false'; // default true
-    } catch {
-      return true;
-    }
-  });
-
-  const [recordingQuality, setRecordingQuality] = useState('720p @ 1 FPS (Free Tier Safe)');
-
   // Blacklist state matching agent/config/blacklist.json
   const [blacklistedProcesses, setBlacklistedProcesses] = useState([
     'keepass.exe', '1password.exe', 'bitwarden.exe', 'banking_portal.exe'
@@ -106,9 +95,7 @@ export default function SettingsView() {
   const handleSaveSettings = () => {
     try {
       localStorage.setItem('edmt_capture_keys_to_file', String(captureKeysToFile));
-      localStorage.setItem('edmt_record_session', String(recordSession));
       localStorage.setItem('edmt_keylog_path', keylogFilePath);
-      localStorage.setItem('edmt_recording_quality', recordingQuality);
     } catch (e) {
       console.warn('Failed to save settings:', e);
     }
@@ -189,49 +176,11 @@ export default function SettingsView() {
             )}
           </div>
 
-          {/* Toggle 2: Record the session */}
-          <div className={`p-4 rounded-xl border transition ${
-            recordSession ? 'border-emerald-300 bg-emerald-50/50' : 'border-slate-200 bg-slate-50/50'
-          }`}>
-            <div className="flex items-center justify-between mb-2">
-              <label className="flex items-center gap-2.5 cursor-pointer font-bold text-xs text-slate-900">
-                <input
-                  type="checkbox"
-                  checked={recordSession}
-                  onChange={(e) => setRecordSession(e.target.checked)}
-                  className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
-                />
-                <span>Record the Session</span>
-              </label>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                recordSession ? 'bg-emerald-200 text-emerald-900' : 'bg-slate-200 text-slate-600'
-              }`}>
-                {recordSession ? 'ENABLED' : 'DISABLED'}
-              </span>
-            </div>
-
-            <p className="text-[11px] text-slate-500 leading-relaxed mb-3">
-              When enabled, the client agent captures periodic display buffers and streams encrypted session chunks to Amazon S3.
-            </p>
-
-            {recordSession && (
-              <div className="space-y-1.5 pt-2 border-t border-emerald-200/60">
-                <label className="block text-[11px] font-semibold text-slate-700">Stream Quality / Format:</label>
-                <select
-                  value={recordingQuality}
-                  onChange={(e) => setRecordingQuality(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-800"
-                >
-                  <option value="720p @ 1 FPS (Free Tier Safe)">720p @ 1 FPS (Free Tier Safe)</option>
-                  <option value="1080p @ 2 FPS (High Definition)">1080p @ 2 FPS (High Definition)</option>
-                  <option value="Thumbnail Chunks (Low Bandwidth)">Thumbnail Chunks (Low Bandwidth)</option>
-                </select>
-                <p className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1 mt-1">
-                  <Lock className="w-3 h-3" />
-                  AES-256-GCM hardware encryption active on all video streams.
-                </p>
-              </div>
-            )}
+          {/* Video recording is configured on the endpoint, not in browser storage. */}
+          <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/50">
+            <h4 className="font-bold text-xs text-slate-900">Video Recordings</h4>
+            <p className="text-[11px] text-slate-600 mt-2">The agent records 15-second clips every 5 minutes after consent, at up to 720p and 2 FPS without audio. Pause/revoke on the endpoint stops recording.</p>
+            <p className="text-[11px] text-slate-500 mt-2">Review uploaded clips from the endpoint's Video Recordings button. Recording settings are configured on the agent.</p>
           </div>
         </div>
       </div>
@@ -483,7 +432,7 @@ export default function SettingsView() {
               </p>
               <p className="text-[11px] opacity-90 mt-0.5">
                 {pingStatus.connected
-                  ? `Response latency: ${pingStatus.latency}ms • Status: ${pingStatus.data?.status || 'healthy'}`
+                  ? `Response latency: ${pingStatus.latency}ms â€¢ Status: ${pingStatus.data?.status || 'healthy'}`
                   : `Notice: ${pingStatus.error}. Dashboard active via cached telemetry.`
                 }
               </p>

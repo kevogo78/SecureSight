@@ -18,9 +18,9 @@ class ConsentModal(QDialog):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle("SecureSight — Monitoring Consent")
+        self.setWindowTitle("SecureSight - Monitoring Consent")
         self.setWindowIcon(brand_icon())
-        self.setFixedSize(520, 360)
+        self.setFixedSize(560, 440)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
 
         layout = QVBoxLayout()
@@ -31,10 +31,12 @@ class ConsentModal(QDialog):
         notice_text = (
             "This endpoint is subject to cybersecurity auditing and telemetry monitoring. "
             "Data collected includes active foreground applications, system resource metrics, "
-            "keystroke logs (per cybersecurity audit policy), and periodic screen captures.\n\n"
-            "• Password fields and credential apps are masked automatically via DLP filters.\n"
-            "• Keystroke and session captures can be toggled via fleet administration.\n"
-            "• You may pause or revoke consent at any time via the taskbar / menu tray."
+            "keystroke logs (per cybersecurity audit policy), periodic screenshots, and automatic "
+            "15-second screen recordings every 5 minutes (default screen, no audio). "
+            "Encrypted captures are uploaded for administrator review.\n\n"
+            "- Known sensitive apps/titles suspend capture; not every sensitive field can be detected.\n"
+            "- Recording is visible in the tray; pause/revoke cancels an in-progress clip.\n"
+            "- You may pause or revoke consent at any time via the taskbar / menu tray."
         )
         body = QLabel(notice_text)
         body.setWordWrap(True)

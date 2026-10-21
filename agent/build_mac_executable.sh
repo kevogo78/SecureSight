@@ -8,7 +8,7 @@ set -e
 cd "$(dirname "$0")"
 
 echo "[*] Building Standalone macOS Binary..."
-python3 -m pip install pyinstaller PyQt6 psutil Pillow cryptography requests pynput
+python3 -m pip install pyinstaller PyQt6 psutil Pillow cryptography requests pynput imageio-ffmpeg==0.6.0
 
 pyinstaller \
     --name "EDMT_Agent_macOS" \
@@ -16,6 +16,7 @@ pyinstaller \
     --windowed \
     --add-data "config:config" \
     --add-data "assets:assets" \
+    --collect-all imageio_ffmpeg \
     --distpath "dist" \
     --workpath "build" \
     run_agent.py

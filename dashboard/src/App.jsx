@@ -368,6 +368,7 @@ export default function App() {
       <SessionPlayerModal
         isOpen={isRecordingModalOpen}
         onClose={() => setIsRecordingModalOpen(false)}
+        endpointId={selectedEndpoint?.endpoint_id}
         endpointName={selectedEndpoint?.name || 'WORKSTATION-WIN11'}
       />
     </div>

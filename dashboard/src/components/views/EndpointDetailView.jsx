@@ -27,22 +27,11 @@ export default function EndpointDetailView({
   const [keylogFilePath, setKeylogFilePath] = useState(() => {
     try { return localStorage.getItem('edmt_keylog_path') || 'agent/keystrokes_audit.txt'; } catch { return 'agent/keystrokes_audit.txt'; }
   });
-  const [recordSession, setRecordSession] = useState(() => {
-    try { return localStorage.getItem('edmt_record_session') !== 'false'; } catch { return true; }
-  });
-  const [recordingQuality, setRecordingQuality] = useState(() => {
-    try { return localStorage.getItem('edmt_recording_quality') || '720p @ 1 FPS (Free Tier Safe)'; } catch { return '720p @ 1 FPS (Free Tier Safe)'; }
-  });
-
   const handleToggleKeystrokes = (val) => {
     setCaptureKeysToFile(val);
     try { localStorage.setItem('edmt_capture_keys_to_file', String(val)); } catch (e) {}
   };
 
-  const handleToggleRecording = (val) => {
-    setRecordSession(val);
-    try { localStorage.setItem('edmt_record_session', String(val)); } catch (e) {}
-  };
 
   if (!endpoint) return null;
 
@@ -112,7 +101,7 @@ export default function EndpointDetailView({
                     ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
                     : 'text-slate-600 bg-slate-100'
               }`}>
-                {(endpoint.status === 'Paused' || endpoint.consent_paused) ? 'â¸ Consent Paused' : `â— ${endpoint.status}`}
+                {(endpoint.status === 'Paused' || endpoint.consent_paused) ? 'Ã¢ÂÂ¸ Consent Paused' : `Ã¢â€”Â ${endpoint.status}`}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-6 text-xs text-slate-500 mt-2">
@@ -139,7 +128,7 @@ export default function EndpointDetailView({
             className="px-3.5 py-2 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
           >
             <Video className="w-4 h-4" />
-            <span>Session Stream</span>
+            <span>Video Recordings</span>
           </button>
           <button
             onClick={() => {
@@ -337,7 +326,7 @@ export default function EndpointDetailView({
                 <span>Cybersecurity Keystroke &amp; Session Audit Controls</span>
               </h4>
               <p className="text-xs text-slate-500 mt-0.5">
-                Configure hardware key event capture and encrypted session streaming for this endpoint.
+                Review key event capture and encrypted video recordings for this endpoint.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -348,10 +337,10 @@ export default function EndpointDetailView({
                 {captureKeysToFile ? 'Keystrokes: ACTIVE' : 'Keystrokes: PAUSED'}
               </span>
               <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-                recordSession ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-slate-100 text-slate-600'
+                'bg-blue-50 text-blue-700 border border-blue-200'
               }`}>
-                <span className={`w-2 h-2 rounded-full ${recordSession ? 'bg-blue-500 animate-pulse' : 'bg-slate-400'}`} />
-                {recordSession ? 'Session Stream: ON' : 'Session Stream: OFF'}
+                <span className={`w-2 h-2 rounded-full ${'bg-blue-500'}`} />
+                Video: periodic clips
               </span>
             </div>
           </div>
@@ -383,33 +372,15 @@ export default function EndpointDetailView({
               </div>
             </div>
 
-            {/* Toggle 2: Session Screen Recording */}
-            <div className={`p-4 rounded-xl border transition ${
-              recordSession ? 'bg-blue-50/40 border-blue-300' : 'bg-slate-50 border-slate-200'
-            }`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-bold text-slate-900">Session Screen Recording</div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">Streams periodic encrypted frames to AWS S3 storage</div>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={recordSession}
-                    onChange={(e) => handleToggleRecording(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
-              <div className="mt-3 pt-2.5 border-t border-slate-200/60 text-[11px] flex items-center justify-between text-slate-600">
-                <span>Capture Specification:</span>
-                <span className="font-semibold text-slate-800">{recordingQuality}</span>
-              </div>
+            {/* Video configuration is owned by the consenting endpoint agent. */}
+            <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/40">
+              <div className="text-xs font-bold text-slate-900">Video Recordings</div>
+              <p className="text-[11px] text-slate-500 mt-1">15-second clips every 5 minutes after agent consent. Default screen, 720p maximum, 2 FPS, no audio.</p>
+              <p className="text-[11px] text-slate-500 mt-1">Pause or revoke monitoring from the endpoint tray. Browser settings do not control the recorder.</p>
+              <button onClick={onViewRecording} className="mt-3 text-xs text-blue-700 font-bold hover:underline">View recordings</button>
             </div>
           </div>
-
-          {/* Audit Notice Box */}
+{/* Audit Notice Box */}
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-3">
             <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
             <div className="text-xs text-slate-700 leading-relaxed">
@@ -459,24 +430,8 @@ export default function EndpointDetailView({
           </div>
 
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-3">
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={recordSession}
-                  onChange={(e) => handleToggleRecording(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-              </label>
-              <div className="flex items-center gap-2 text-slate-700">
-                <Video className="w-4 h-4 text-emerald-600" />
-                <span>Session Video Stream: <strong className={recordSession ? 'text-emerald-700' : 'text-slate-500'}>{recordSession ? 'ENABLED' : 'PAUSED'}</strong> ({recordingQuality})</span>
-              </div>
-            </div>
-            <button onClick={onViewRecording} className="text-emerald-700 font-bold hover:underline cursor-pointer">
-              Launch Session Player â†’
-            </button>
+            <span>Video: 15-second recorded clips, 2 FPS, no audio. Controlled by agent consent.</span>
+            <button onClick={onViewRecording} className="text-emerald-700 font-bold hover:underline">View video recordings</button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-2">

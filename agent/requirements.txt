@@ -7,6 +7,7 @@ psutil>=5.9.0
 
 # Screen Capture & Redaction Engine
 Pillow>=10.0.0
+imageio-ffmpeg==0.6.0
 
 # AES-256-GCM Cryptographic Engine
 cryptography>=41.0.0

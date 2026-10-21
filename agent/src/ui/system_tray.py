@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
-from PyQt6.QtCore import pyqtSignal, QObject
+from PyQt6.QtCore import pyqtSignal, pyqtSlot, QObject
 from .branding import brand_icon
 
 class SystemTrayManager(QObject):
@@ -17,6 +17,8 @@ class SystemTrayManager(QObject):
         self.menu = QMenu()
         self.status_action = self.menu.addAction("Status: Active")
         self.status_action.setEnabled(False)
+        self.recording_action = self.menu.addAction("Video: Idle; clips every 5 minutes")
+        self.recording_action.setEnabled(False)
 
         self.pause_action = self.menu.addAction("Pause (15 mins)")
         self.pause_action.triggered.connect(self.toggle_pause)
@@ -40,3 +42,11 @@ class SystemTrayManager(QObject):
 
     def update_status_text(self, text: str):
         self.status_action.setText(f"Status: {text}")
+
+    @pyqtSlot(str)
+    def update_recording_status(self, text):
+        self.recording_action.setText(f"Video: {text}")
+        if text.startswith("Recording"):
+            self.tray.setToolTip("SecureSight - Recording screen video")
+        else:
+            self.tray.setToolTip("SecureSight - Monitoring paused" if self.is_paused else "SecureSight - Monitoring active")
