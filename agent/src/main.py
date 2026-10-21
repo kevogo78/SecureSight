@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer
 from src.ui.consent_modal import ConsentModal
 from src.ui.system_tray import SystemTrayManager
+from src.ui.branding import brand_icon
 from src.core.activity_tracker import ActivityTracker
 from src.core.privacy_filter import PrivacyFilter
 from src.core.crypto_engine import CryptoEngine
@@ -179,6 +180,8 @@ class AgentOrchestrator:
 
 def main():
     qt_app = QApplication(sys.argv)
+    qt_app.setApplicationName("SecureSight")
+    qt_app.setWindowIcon(brand_icon())
     qt_app.setQuitOnLastWindowClosed(False)
 
     modal = ConsentModal()

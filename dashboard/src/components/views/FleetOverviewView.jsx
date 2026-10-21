@@ -29,7 +29,7 @@ export default function FleetOverviewView({
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span>AWS Telemetry Fleet {totalCount > 0 ? 'Online' : 'Standby'}</span>
           </div>
-          <h2 className="text-2xl font-black tracking-tight">Endpoint Privacy &amp; Compliance Control</h2>
+          <h2 className="text-2xl font-black tracking-tight">SecureSight Privacy &amp; Compliance</h2>
           <p className="text-xs text-slate-300 mt-1 max-w-xl">
             {totalCount > 0
               ? `Live observability active across ${totalCount} monitored workstations. All client screen captures and events are sanitized via local DLP prior to AWS S3 ingestion.`

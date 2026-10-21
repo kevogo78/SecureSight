@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QHBoxLayout, QMessageBox, QLineEdit, QFormLayout
 )
 from PyQt6.QtCore import Qt
+from .branding import brand_icon
 
 class ConsentModal(QDialog):
     def __init__(self, default_server_url: str = None):
@@ -17,7 +18,8 @@ class ConsentModal(QDialog):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle("Endpoint Monitoring & Consent Authorization")
+        self.setWindowTitle("SecureSight — Monitoring Consent")
+        self.setWindowIcon(brand_icon())
         self.setFixedSize(520, 360)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  Shield, LayoutDashboard, Monitor, Activity, 
+  LayoutDashboard, Monitor, Activity,
   FileText, Settings, LogOut, Radio 
 } from 'lucide-react';
 
@@ -9,14 +9,10 @@ export default function Sidebar({ activeTab, onTabChange, onLogout, endpointsCou
     <aside className="w-64 bg-[#0a2312] text-white flex flex-col justify-between shrink-0 shadow-xl font-sans">
       <div>
         {/* Brand Header */}
-        <div className="flex items-center gap-3 px-6 py-6 border-b border-emerald-900/40">
-          <div className="p-2 rounded-xl bg-emerald-500 text-black shadow-lg shadow-emerald-950">
-            <Shield className="w-6 h-6 fill-black stroke-emerald-500" />
-          </div>
-          <div>
-            <h1 className="font-black text-lg leading-tight tracking-tight">Privacy Monitor</h1>
-            <p className="text-[11px] text-emerald-400 font-semibold tracking-wider uppercase">ITEC4810 Capstone</p>
-          </div>
+        <div className="px-4 py-5 border-b border-emerald-900/40">
+          <h1 className="sr-only">SecureSight</h1>
+          <img src="/branding/securesight-logo.png" alt="SecureSight — Visibility. Security. Control." className="w-full h-auto" />
+          <p className="text-[10px] text-center text-emerald-400 font-semibold tracking-wider uppercase">ITEC4810 Capstone</p>
         </div>
 
         {/* Navigation Links */}
