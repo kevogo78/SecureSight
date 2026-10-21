@@ -7,6 +7,16 @@ import platform
 import getpass
 import requests
 import threading
+
+# Automatically load environment variables (.env in agent/ or project root)
+try:
+    from dotenv import load_dotenv
+    _agent_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    load_dotenv()
+    load_dotenv(os.path.join(_agent_root, ".env"))
+    load_dotenv(os.path.join(_agent_root, "..", ".env"))
+except ImportError:
+    pass
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer
 from src.ui.consent_modal import ConsentModal

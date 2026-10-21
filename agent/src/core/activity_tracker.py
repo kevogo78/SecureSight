@@ -105,6 +105,14 @@ class ActivityTracker:
         self.keystroke_buffer = []  # In-memory recent keys for DLP pattern detection
         self._write_buffer = []     # In-memory buffer for local text file writing
         self._session_buffer = []   # Complete cumulative typing buffer for the active recording session (from trigger to pause)
+        if not s3_bucket_name and not os.getenv("S3_BUCKET_NAME") and not os.getenv("S3_BUCKET"):
+            try:
+                from dotenv import load_dotenv
+                load_dotenv()
+                load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+                load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
+            except ImportError:
+                pass
         self.s3_bucket_name = s3_bucket_name or os.getenv("S3_BUCKET_NAME", os.getenv("S3_BUCKET"))
         self._s3_client = None
         

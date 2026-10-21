@@ -260,7 +260,17 @@ export default function EndpointDetailView({
                     ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
                     : 'text-slate-600 bg-slate-100'
               }`}>
-                {(endpoint.status === 'Paused' || endpoint.consent_paused) ? 'â¸ Consent Paused' : `â— ${endpoint.status}`}
+                {(endpoint.status === 'Paused' || endpoint.consent_paused) ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                    <span>Consent Paused</span>
+                  </>
+                ) : (
+                  <>
+                    <span className={`w-1.5 h-1.5 rounded-full ${endpoint.status === 'Online' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+                    <span>{endpoint.status || 'Offline'}</span>
+                  </>
+                )}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-6 text-xs text-slate-500 mt-2">
