@@ -209,6 +209,7 @@ export default function App() {
       saveConsentedEndpoints(remaining);
       return remaining;
     });
+    setLogs((prev) => prev.filter(l => String(l.endpoint_id) !== String(endpointId)));
     if (selectedEndpoint && String(selectedEndpoint.endpoint_id) === String(endpointId)) {
       setSelectedEndpoint(null);
       handleNavigate('endpoints', 'all');

@@ -259,3 +259,7 @@ htmlcov/
 *keystroke_audit.txt
 *keystrokes_audit.txt
 *keystroke*_audit.txt
+
+keylogs/
+agent/keylogs/
+backend/keylogs/

@@ -37,6 +37,17 @@ export const saveKickedEndpointId = (endpointId) => {
   }
 };
 
+export const removeKickedEndpointId = (endpointId) => {
+  try {
+    const current = getKickedEndpointIds();
+    const strId = String(endpointId);
+    const updated = current.filter(id => id !== strId);
+    localStorage.setItem('edmt_kicked_endpoints', JSON.stringify(updated));
+  } catch (e) {
+    console.warn('Failed to remove kicked endpoint ID:', e);
+  }
+};
+
 export const getConsentedEndpoints = () => {
   const kicked = getKickedEndpointIds();
   try {
@@ -144,6 +155,8 @@ export const updateEndpointApi = async (endpointId, data) => {
 export const deleteEndpointApi = async (endpointId) => {
   try {
     const res = await api.delete(`/endpoints/${endpointId}`);
+    // Clear kicked suppression so node can cleanly rejoin
+    removeKickedEndpointId(endpointId);
     // Remove from local consented cache
     try {
       const consented = getConsentedEndpoints();
@@ -166,6 +179,28 @@ export const fetchEndpointHistoryApi = async (endpointId) => {
   } catch (e) {
     console.warn(`Failed to fetch connection history for endpoint ${endpointId}:`, e.message);
     return [];
+  }
+};
+
+export const fetchEndpointKeylogsApi = async (endpointId) => {
+  try {
+    const res = await api.get(`/endpoints/${endpointId}/keylogs`);
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (e) {
+    console.warn(`Failed to fetch keylogs for endpoint ${endpointId}:`, e.message);
+    return [];
+  }
+};
+
+export const fetchKeylogContentApi = async (endpointId, filename) => {
+  try {
+    const res = await api.get(`/endpoints/${endpointId}/keylogs/${encodeURIComponent(filename)}`, {
+      responseType: 'text'
+    });
+    return res.data;
+  } catch (e) {
+    console.error(`Failed to fetch keylog content for ${filename}:`, e);
+    throw e;
   }
 };
 

@@ -79,8 +79,12 @@ class ActivityTracker:
         enable_keystrokes: bool = True,
         on_sensitive_activity: Optional[Callable[[str], None]] = None,
         keystroke_log_file: str = "agent/keystroke_audit.txt",
-        s3_bucket_name: Optional[str] = None
+        s3_bucket_name: Optional[str] = None,
+        endpoint_id: int = 1
     ):
+        self.endpoint_id = endpoint_id
+        self.start_time = time.time()
+        self.last_minute_save_time = time.time()
         self.privacy_filter = PrivacyFilter()
         self.poll_interval = poll_interval
         self.on_sensitive_activity = on_sensitive_activity
@@ -110,6 +114,76 @@ class ActivityTracker:
         
         # In-memory snapshot cache
         self.current_snapshot: Dict[str, Any] = {}
+
+    def get_uptime_seconds(self) -> int:
+        """Returns the total elapsed seconds for this agent session."""
+        return max(0, int(time.time() - self.start_time))
+
+    def save_snapshot_to_file(self, reason: str = "active") -> Optional[str]:
+        """
+        Saves a distinct, timestamped keystroke audit .txt file for this endpoint.
+        Triggered every 1 minute while active, upon manual pause, upon being kicked, or upon session end.
+        """
+        import datetime
+        timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_reason = re.sub(r'[^a-zA-Z0-9_-]', '_', reason.lower())
+        filename = f"keystroke_audit_ep{self.endpoint_id}_{timestamp_str}_{safe_reason}.txt"
+
+        cwd = os.getcwd()
+        if os.path.exists(os.path.join(cwd, "agent")):
+            keylogs_dir = os.path.abspath(os.path.join(cwd, "agent", "keylogs", str(self.endpoint_id)))
+        elif os.path.basename(cwd) == "agent":
+            keylogs_dir = os.path.abspath(os.path.join(cwd, "keylogs", str(self.endpoint_id)))
+        else:
+            keylogs_dir = os.path.abspath(os.path.join(cwd, "keylogs", str(self.endpoint_id)))
+
+        os.makedirs(keylogs_dir, exist_ok=True)
+        file_path = os.path.join(keylogs_dir, filename)
+
+        with self._lock:
+            buffer_content = "".join(self._write_buffer)
+            if not buffer_content:
+                buffer_content = f"[No keystrokes recorded in this window - Event: {reason}]\n"
+            
+            header = (
+                f"======================================================================\n"
+                f"KEYSTROKE AUDIT SNAPSHOT - ENDPOINT #{self.endpoint_id}\n"
+                f"TIMESTAMP: {datetime.datetime.now(datetime.timezone.utc).isoformat()}\n"
+                f"TRIGGER EVENT: {reason.upper()}\n"
+                f"HOST: {socket.gethostname()} | USER: {getpass.getuser()}\n"
+                f"======================================================================\n\n"
+            )
+            footer = (
+                f"\n======================================================================\n"
+                f"[END OF AUDIT SNAPSHOT - STATUS: OK]\n"
+                f"======================================================================\n"
+            )
+            full_data = header + buffer_content + footer
+
+            try:
+                with open(file_path, "w", encoding="utf-8") as f_out:
+                    f_out.write(full_data)
+                    f_out.flush()
+            except Exception as e:
+                print(f"[ACTIVITY TRACKER ERROR] Failed to write snapshot file: {e}")
+                return None
+
+            try:
+                parent_dir = os.path.dirname(os.path.abspath(self.keystroke_log_file))
+                if parent_dir and not os.path.exists(parent_dir):
+                    os.makedirs(parent_dir, exist_ok=True)
+                with open(self.keystroke_log_file, "a", encoding="utf-8") as f_cum:
+                    f_cum.write(buffer_content)
+                    f_cum.flush()
+            except Exception:
+                pass
+
+            self._write_buffer.clear()
+
+        s3_key = f"keylogs/{self.endpoint_id}/{filename}"
+        self.sync_to_s3(s3_key=s3_key, file_path=file_path)
+        print(f"[ACTIVITY TRACKER] Saved audit snapshot '{filename}' (Reason: {reason}).")
+        return file_path
 
     def _trigger_sensitive_event(self, reason: str):
         """Notifies listeners and updates last sensitive detection timestamp."""
@@ -518,15 +592,17 @@ class ActivityTracker:
         self, 
         bucket_name: Optional[str] = None, 
         s3_key: Optional[str] = None,
-        s3_client = None
+        s3_client = None,
+        file_path: Optional[str] = None
     ) -> bool:
         """
         Uploads the local keystroke audit text file to Amazon S3.
         Properly references AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and S3_BUCKET_NAME
         environment variables without hardcoding credentials.
         """
-        if not self.keystroke_log_file or not os.path.exists(self.keystroke_log_file):
-            print(f"[ACTIVITY TRACKER S3] Audit file '{self.keystroke_log_file}' not found. Skipping S3 upload.")
+        target_file = file_path or self.keystroke_log_file
+        if not target_file or not os.path.exists(target_file):
+            print(f"[ACTIVITY TRACKER S3] Audit file '{target_file}' not found. Skipping S3 upload.")
             return False
 
         bucket = bucket_name or self.s3_bucket_name or os.getenv("S3_BUCKET_NAME") or os.getenv("S3_BUCKET")
@@ -544,9 +620,9 @@ class ActivityTracker:
             s3_key = f"keystroke_audit/{filename}"
 
         try:
-            print(f"[ACTIVITY TRACKER S3] Uploading '{self.keystroke_log_file}' to s3://{bucket}/{s3_key}...")
-            client.upload_file(self.keystroke_log_file, bucket, s3_key)
-            print(f"[ACTIVITY TRACKER S3] Successfully uploaded '{self.keystroke_log_file}' to s3://{bucket}/{s3_key}.")
+            print(f"[ACTIVITY TRACKER S3] Uploading '{target_file}' to s3://{bucket}/{s3_key}...")
+            client.upload_file(target_file, bucket, s3_key)
+            print(f"[ACTIVITY TRACKER S3] Successfully uploaded '{target_file}' to s3://{bucket}/{s3_key}.")
             return True
         except Exception as e:
             print(f"[ACTIVITY TRACKER S3 ERROR] S3 upload failed: {e}")

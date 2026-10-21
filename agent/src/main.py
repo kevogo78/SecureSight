@@ -57,9 +57,12 @@ class AgentOrchestrator:
         self.privacy = PrivacyFilter()
         self.sensitive_cooldown_until = 0.0
         self.last_sensitive_reason = "Clean"
+        self.session_start = time.time()
+        self.last_minute_file_save = time.time()
         self.tracker = ActivityTracker(
             enable_keystrokes=True,
-            on_sensitive_activity=self.on_sensitive_input_detected
+            on_sensitive_activity=self.on_sensitive_input_detected,
+            endpoint_id=self.endpoint_id
         )
         self.crypto = CryptoEngine(CONFIG["crypto_key_hex"])
         self.api = TelemetryAPIClient(self.server_url)
@@ -108,9 +111,28 @@ class AgentOrchestrator:
             # Backend may not have endpoints route; telemetry loop will auto-enroll
             print(f"Endpoint registration transport failed: {e}")
 
+    def _upload_keylog_file(self, file_path: str):
+        """Uploads saved audit .txt log file to backend."""
+        if not file_path or not os.path.exists(file_path):
+            return
+        try:
+            upload_url = self.server_url.replace("/telemetry", f"/endpoints/{self.endpoint_id}/keylogs/upload")
+            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            fname = os.path.basename(file_path)
+            payload = {"filename": fname, "content": content}
+            resp = requests.post(upload_url, json=payload, timeout=3)
+            if resp.status_code == 200:
+                print(f"[ACTIVITY TRACKER] Successfully synced keylog '{fname}' to backend server.")
+        except Exception:
+            pass
+
     def handle_manual_pause(self, paused: bool):
         self.is_suspended = paused
         if paused:
+            saved_file = self.tracker.save_snapshot_to_file(reason="paused")
+            if saved_file:
+                self._upload_keylog_file(saved_file)
             self.tracker.set_keystrokes_enabled(False)
         else:
             self.tracker.set_keystrokes_enabled(True)
@@ -123,6 +145,13 @@ class AgentOrchestrator:
 
     def execute_polling_loop(self):
         self.tick_counter += 1
+        now = time.time()
+        if (now - self.last_minute_file_save) >= 60:
+            self.last_minute_file_save = now
+            if not self.is_suspended and self.tracker.enable_keystrokes:
+                saved_file = self.tracker.save_snapshot_to_file(reason="1-minute-interval")
+                if saved_file:
+                    self._upload_keylog_file(saved_file)
         metrics = self.tracker.get_system_metrics()
         activity = self.tracker.get_and_reset_activity()
         kpm = activity.get("kpm", 0)
@@ -161,8 +190,10 @@ class AgentOrchestrator:
             raw_screen = ScreenCaptureEngine.capture_and_redact()
             encrypted_media, iv_hex, file_hash = self.crypto.encrypt_bytes(raw_screen)
 
+        uptime_seconds = int(time.time() - self.session_start)
         payload = {
             "endpoint_id": self.endpoint_id,
+            "uptime_seconds": uptime_seconds,
             "active_app": active_proc,
             "app_category": "Browsing" if website_url else "Development",
             "website_url": website_url,
@@ -191,6 +222,9 @@ class AgentOrchestrator:
         # Check if endpoint was de-authorized or kicked by fleet administrator
         if res and res.get("status") == "kicked":
             print(f"[!] Workstation {self.endpoint_name} (ID: {self.endpoint_id}) was kicked by administrator. Shutting down agent.")
+            saved_file = self.tracker.save_snapshot_to_file(reason="kicked")
+            if saved_file:
+                self._upload_keylog_file(saved_file)
             self.terminate()
             return
 
@@ -203,6 +237,9 @@ class AgentOrchestrator:
 
     def terminate(self):
         self.timer.stop()
+        saved_file = self.tracker.save_snapshot_to_file(reason="session_end")
+        if saved_file:
+            self._upload_keylog_file(saved_file)
         self.tracker.stop()
         try:
             disconnect_url = self.server_url.replace("/telemetry", f"/endpoints/{self.endpoint_id}/disconnect")

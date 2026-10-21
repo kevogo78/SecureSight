@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Monitor, ChevronRight, Cpu, LayoutDashboard, HardDrive, Wifi, 
   ArrowDown, ArrowUp, Key, Camera, Video, Clock, CheckCircle2, 
   ShieldCheck, AlertTriangle, ExternalLink, Globe, FileText, ArrowLeft,
-  UserX
+  UserX, Download, Eye, RefreshCw, X
 } from 'lucide-react';
+import { fetchEndpointKeylogsApi, fetchKeylogContentApi } from '../../services/api';
 import { 
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar 
 } from 'recharts';
@@ -26,6 +27,54 @@ export default function EndpointDetailView({
   const [keylogFilePath, setKeylogFilePath] = useState(() => {
     try { return localStorage.getItem('edmt_keylog_path') || 'agent/keystroke_audit.txt'; } catch { return 'agent/keystroke_audit.txt'; }
   });
+
+  const [keylogFiles, setKeylogFiles] = useState([]);
+  const [isLoadingKeylogs, setIsLoadingKeylogs] = useState(false);
+  const [previewContent, setPreviewContent] = useState(null);
+  const [previewFilename, setPreviewFilename] = useState(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+
+  const loadKeylogs = async () => {
+    if (!endpoint?.endpoint_id) return;
+    setIsLoadingKeylogs(true);
+    try {
+      const files = await fetchEndpointKeylogsApi(endpoint.endpoint_id);
+      setKeylogFiles(files);
+    } catch (e) {
+      console.warn('Failed to load keylogs:', e);
+    } finally {
+      setIsLoadingKeylogs(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSubTab === 'keylogs') {
+      loadKeylogs();
+    }
+  }, [activeSubTab, endpoint?.endpoint_id]);
+
+  const handleViewKeylog = async (filename) => {
+    setPreviewFilename(filename);
+    setIsPreviewLoading(true);
+    try {
+      const content = await fetchKeylogContentApi(endpoint.endpoint_id, filename);
+      setPreviewContent(content);
+    } catch (e) {
+      setPreviewContent(`[Failed to read keylog: ${e.message}]`);
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
+
+  const handleDownloadKeylog = (filename) => {
+    const url = `/api/v1/endpoints/${endpoint.endpoint_id}/keylogs/${encodeURIComponent(filename)}`;
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const handleToggleKeystrokes = (val) => {
     setCaptureKeysToFile(val);
@@ -107,7 +156,7 @@ export default function EndpointDetailView({
               <div>Assigned User: <strong className="text-slate-800">{endpoint.user}</strong></div>
               <div>Operating System: <strong className="text-slate-800">{endpoint.os}</strong></div>
               <div>IP Address: <strong className="text-slate-800 font-mono">{endpoint.ipAddress || endpoint.ip_address || endpoint.ip || `192.168.1.${100 + (Number(endpoint.endpoint_id || 1) % 150)}`}</strong></div>
-              <div>Session Uptime: <strong className="text-slate-800">{endpoint.uptime}</strong></div>
+              <div>Session Uptime: <strong className="text-slate-800">{endpoint.uptime || "Active (< 1m)"}</strong></div>
               <div>Agent Version: <strong className="text-slate-800 font-mono">{endpoint.agent_ver}</strong></div>
             </div>
           </div>
@@ -318,7 +367,7 @@ export default function EndpointDetailView({
                 <span>Cybersecurity Keystroke Audit Controls</span>
               </h4>
               <p className="text-xs text-slate-500 mt-0.5">
-                Configure hardware key event capture and diagnostic audit logging for this endpoint.
+                Configure hardware key event capture, inspect periodic .txt log archives, and download audit telemetry.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -333,14 +382,13 @@ export default function EndpointDetailView({
 
           {/* Interactive Toggle Control Grid */}
           <div className="grid grid-cols-1 gap-4">
-            {/* Toggle 1: Keystroke Capture */}
             <div className={`p-4 rounded-xl border transition ${
               captureKeysToFile ? 'bg-emerald-50/40 border-emerald-300' : 'bg-slate-50 border-slate-200'
             }`}>
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-xs font-bold text-slate-900">Keystroke Capture &amp; File Logging</div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">Writes key events to local text file &amp; telemetry buffer</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">Writes key events to local text file &amp; auto-archives audit snapshots to S3</div>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -353,14 +401,109 @@ export default function EndpointDetailView({
                 </label>
               </div>
               <div className="mt-3 pt-2.5 border-t border-slate-200/60 text-[11px] font-mono flex items-center justify-between text-slate-600">
-                <span>Local Audit Buffer:</span>
+                <span>Active Local Audit Buffer:</span>
                 <code className="bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-800 font-bold">{keylogFilePath}</code>
               </div>
               <div className="mt-2 text-[11px] font-mono flex items-center justify-between text-slate-600">
-                <span>S3 Sync Target (On Toggle Off):</span>
-                <code className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200 font-bold">s3://$&#123;S3_BUCKET_NAME&#125;/keystroke_audit/keystroke_audit.txt</code>
+                <span>Archive Schedule:</span>
+                <span className="text-[11px] text-slate-500">Auto-saved every 1-min active, on pause, kick, and session termination.</span>
               </div>
             </div>
+          </div>
+
+          {/* SECTION: AUDIT TEXT FILES (.TXT ARCHIVES) */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-emerald-600" />
+                  <span>Audit Text Files (.txt Logs)</span>
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Periodic minute snapshots, pause interlocks, and session disconnect records available for instant viewing and download.
+                </p>
+              </div>
+              <button
+                onClick={loadKeylogs}
+                disabled={isLoadingKeylogs}
+                className="px-2.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingKeylogs ? 'animate-spin' : ''}`} />
+                <span>Refresh Logs</span>
+              </button>
+            </div>
+
+            {isLoadingKeylogs ? (
+              <div className="text-center py-6 text-slate-400 text-xs font-medium">Loading keylog files...</div>
+            ) : keylogFiles.length === 0 ? (
+              <div className="bg-slate-50 rounded-xl border border-slate-200 p-6 text-center text-xs text-slate-500">
+                <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="font-semibold text-slate-700">No archived .txt files recorded yet for this endpoint.</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Files are automatically saved every minute while typing is active, whenever monitoring is paused, or when the agent disconnects.
+                </p>
+              </div>
+            ) : (
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                <div className="overflow-x-auto max-h-64">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold sticky top-0">
+                      <tr>
+                        <th className="py-2.5 px-3">Filename</th>
+                        <th className="py-2.5 px-3">Trigger Event</th>
+                        <th className="py-2.5 px-3">Modified</th>
+                        <th className="py-2.5 px-3">Size</th>
+                        <th className="py-2.5 px-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700 bg-white">
+                      {keylogFiles.map((kf) => (
+                        <tr key={kf.filename} className="hover:bg-slate-50/70 transition">
+                          <td className="py-2.5 px-3 font-mono font-bold text-slate-900 flex items-center gap-2">
+                            <FileText className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="truncate max-w-xs">{kf.filename}</span>
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              kf.event_type === 'Paused' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                              kf.event_type === 'Kicked' ? 'bg-red-50 text-red-700 border border-red-200' :
+                              kf.event_type === 'Session End' ? 'bg-slate-100 text-slate-700 border border-slate-300' :
+                              'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            }`}>
+                              {kf.event_type}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-500 text-[11px] font-mono">
+                            {kf.modified_at ? new Date(kf.modified_at).toLocaleString() : 'Recent'}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px]">
+                            {kf.size_bytes ? `${(kf.size_bytes / 1024).toFixed(1)} KB` : '< 1 KB'}
+                          </td>
+                          <td className="py-2.5 px-3 text-right space-x-2">
+                            <button
+                              onClick={() => handleViewKeylog(kf.filename)}
+                              className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold transition inline-flex items-center gap-1 cursor-pointer"
+                              title="View log content"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>View</span>
+                            </button>
+                            <button
+                              onClick={() => handleDownloadKeylog(kf.filename)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition inline-flex items-center gap-1 cursor-pointer"
+                              title="Download .txt file"
+                            >
+                              <Download className="w-3 h-3" />
+                              <span>Download</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Audit Notice Box */}
@@ -461,6 +604,55 @@ export default function EndpointDetailView({
                 <Bar dataKey="ram" fill="#0ea5e9" name="RAM %" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+      {/* KEYLOG PREVIEW MODAL */}
+      {previewFilename && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-emerald-600" />
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">{previewFilename}</h3>
+                  <p className="text-[11px] text-slate-500">Keystroke Audit Log Preview</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDownloadKeylog(previewFilename)}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer shadow-sm"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download .txt</span>
+                </button>
+                <button
+                  onClick={() => { setPreviewFilename(null); setPreviewContent(null); }}
+                  className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1 bg-slate-950">
+              {isPreviewLoading ? (
+                <div className="text-center py-10 text-slate-400 text-xs font-mono">Loading file contents...</div>
+              ) : (
+                <pre className="font-mono text-xs text-emerald-400 whitespace-pre-wrap select-text leading-relaxed">
+                  {previewContent || '[Empty file]'}
+                </pre>
+              )}
+            </div>
+            <div className="px-6 py-3 bg-slate-100 border-t border-slate-200 text-[11px] text-slate-500 flex items-center justify-between">
+              <span>Security Interlock: Sensitive patterns automatically masked with * by local DLP engine.</span>
+              <button
+                onClick={() => { setPreviewFilename(null); setPreviewContent(null); }}
+                className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

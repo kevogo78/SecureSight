@@ -1,0 +1,11 @@
+{
+  "endpoint_id": 1,
+  "server_url": "http://127.0.0.1:8000/api/v1/telemetry",
+  "polling_interval_seconds": 10,
+  "screenshot_frequency_ticks": 6,
+  "crypto_key_hex": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "interval_ms": 10000,
+  "enable_keystrokes": true,
+  "capture_keys_to_file": true,
+  "s3_bucket_name": "endpoint-monitor-media-076429319550-us-east-1-an"
+}

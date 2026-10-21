@@ -1,11 +1,14 @@
 import logging
 import datetime
 import time
-from fastapi import APIRouter, HTTPException
+import os
+from fastapi import APIRouter, HTTPException, Response
 from typing import List, Optional
 from pydantic import BaseModel
 from ..database import get_db_connection
 from ..models.schemas import EndpointUpdate
+from ..config import S3_BUCKET
+from ..utils.s3_helper import s3_client
 
 logger = logging.getLogger("endpoints")
 
@@ -26,6 +29,23 @@ def format_relative_time(seconds_ago: float) -> str:
         return f"{int(seconds_ago // 3600)}h ago"
     else:
         return f"{int(seconds_ago // 86400)}d ago"
+
+def format_uptime(seconds_val: float) -> str:
+    seconds = int(seconds_val or 0)
+    if seconds < 60:
+        return f"{seconds}s"
+    elif seconds < 3600:
+        m = seconds // 60
+        s = seconds % 60
+        return f"{m}m {s}s"
+    elif seconds < 86400:
+        h = seconds // 3600
+        m = (seconds % 3600) // 60
+        return f"{h}h {m}m"
+    else:
+        d = seconds // 86400
+        h = (seconds % 86400) // 3600
+        return f"{d}d {h}h"
 
 # In-memory storage for active endpoints, kicked endpoint IDs, paused consent IDs, and connection history
 ACTIVE_ENDPOINTS = {}
@@ -101,7 +121,7 @@ class EndpointRegistration(BaseModel):
 
 @router.get("")
 def list_endpoints():
-    """Returns monitored endpoints with live heartbeat status, MAC address, and device fingerprint."""
+    """Returns monitored endpoints with live heartbeat status, session uptime, MAC address, and device fingerprint."""
     ensure_schema_migration()
     results = []
     seen_ids = set()
@@ -156,6 +176,20 @@ def list_endpoints():
                     else:
                         calc_status = "Online"
 
+                    # Calculate session uptime
+                    session_start = cached_ep.get("session_start_time")
+                    if is_alive:
+                        if cached_ep.get("uptime_seconds") is not None:
+                            uptime_sec = cached_ep.get("uptime_seconds")
+                        elif session_start:
+                            uptime_sec = max(0, int(now_ts - session_start))
+                        else:
+                            uptime_sec = int(max(0, HEARTBEAT_TIMEOUT_SECONDS - seconds_ago))
+                        calc_uptime = format_uptime(uptime_sec)
+                    else:
+                        uptime_sec = 0
+                        calc_uptime = "Offline"
+
                     ip_val = cached_ep.get("ipAddress") or cached_ep.get("ip_address") or f"192.168.1.{100 + (ep_id % 150)}"
                     custom_name = r[10] or cached_ep.get("custom_name")
                     display_name = custom_name or cached_ep.get("display_name") or r[1]
@@ -174,6 +208,8 @@ def list_endpoints():
                         "osType": "mac" if "mac" in (r[2] or "").lower() else "win",
                         "agent_ver": r[3],
                         "status": calc_status,
+                        "uptime": calc_uptime,
+                        "uptime_seconds": uptime_sec,
                         "lastSeen": format_relative_time(seconds_ago),
                         "lastSeenDate": last_seen_dt.isoformat() if last_seen_dt else None,
                         "user": r[6],
@@ -209,12 +245,27 @@ def list_endpoints():
             else:
                 calc_status = "Online"
 
+            session_start = ep.get("session_start_time")
+            if is_alive:
+                if ep.get("uptime_seconds") is not None:
+                    uptime_sec = ep.get("uptime_seconds")
+                elif session_start:
+                    uptime_sec = max(0, int(now_ts - session_start))
+                else:
+                    uptime_sec = 60
+                calc_uptime = format_uptime(uptime_sec)
+            else:
+                uptime_sec = 0
+                calc_uptime = "Offline"
+
             ip_val = ep.get("ipAddress") or ep.get("ip_address") or f"192.168.1.{100 + (ep_id % 150)}"
             mac_val = ep.get("mac_address") or f"02:00:00:00:00:{ep_id:02x}"
             fp_val = ep.get("device_fingerprint") or f"fp_{ep_id}"
             results.append({
                 **ep,
                 "status": calc_status,
+                "uptime": calc_uptime,
+                "uptime_seconds": uptime_sec,
                 "lastSeen": format_relative_time(seconds_ago),
                 "kicked": is_kicked,
                 "consent_paused": is_paused,
@@ -233,6 +284,7 @@ def register_endpoint(ep: EndpointRegistration):
     mac_val = ep.mac_address or f"02:00:00:00:00:{ep.endpoint_id:02x}"
     fp_val = ep.device_fingerprint or f"fp_{ep.endpoint_id}"
     now_utc = datetime.datetime.now(datetime.timezone.utc)
+    now_ts = time.time()
 
     ACTIVE_ENDPOINTS[ep.endpoint_id] = {
         "endpoint_id": ep.endpoint_id,
@@ -245,9 +297,12 @@ def register_endpoint(ep: EndpointRegistration):
         "osType": "mac" if "mac" in ep.os_type.lower() else "win",
         "agent_ver": ep.agent_ver,
         "status": "Online",
+        "uptime": "Just started",
+        "uptime_seconds": 0,
+        "session_start_time": now_ts,
         "lastSeen": "Just now",
         "lastSeenDate": now_utc.isoformat(),
-        "last_seen_time": time.time(),
+        "last_seen_time": now_ts,
         "user": ep.user,
         "app": "Consent Authorized",
         "cpu": 0.0,
@@ -488,15 +543,32 @@ def update_endpoint(endpoint_id: int, payload: EndpointUpdate):
 @router.delete("/{endpoint_id}")
 def delete_endpoint(endpoint_id: int):
     """
-    Safely removes an endpoint and its associated logs from the database and active fleet registry.
+    Safely and completely removes an endpoint and its associated logs, history, and media
+    from the database and active fleet registry. Allows the node to cleanly rejoin later.
     """
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
+                # 1. Clean media captures associated with this endpoint's audit logs
+                cur.execute("""
+                    DELETE FROM media_captures 
+                    WHERE log_id IN (SELECT log_id FROM audit_logs WHERE endpoint_id = %s);
+                """, (endpoint_id,))
+                
+                # 2. Clean audit logs
+                cur.execute("DELETE FROM audit_logs WHERE endpoint_id = %s;", (endpoint_id,))
+                
+                # 3. Clean telemetry logs
+                cur.execute("DELETE FROM telemetry_logs WHERE endpoint_id = %s;", (endpoint_id,))
+                
+                # 4. Clean connection history
+                cur.execute("DELETE FROM endpoint_connection_history WHERE endpoint_id = %s;", (endpoint_id,))
+                
+                # 5. Delete the endpoint record itself
                 cur.execute("DELETE FROM endpoints WHERE endpoint_id = %s;", (endpoint_id,))
                 conn.commit()
     except Exception as e:
-        logger.warning(f"Database delete_endpoint notice: {e}")
+        logger.warning(f"Database delete_endpoint warning: {e}")
 
     # Clean in-memory caches
     ACTIVE_ENDPOINTS.pop(endpoint_id, None)
@@ -509,9 +581,18 @@ def delete_endpoint(endpoint_id: int):
         item for item in IN_MEMORY_CONNECTION_HISTORY if item.get("endpoint_id") != endpoint_id
     ]
 
+    # Clean in-memory audit logs
+    try:
+        from .audit import IN_MEMORY_AUDIT_LOGS
+        IN_MEMORY_AUDIT_LOGS[:] = [
+            l for l in IN_MEMORY_AUDIT_LOGS if l.get("endpoint_id") != endpoint_id
+        ]
+    except Exception:
+        pass
+
     return {
         "status": "deleted",
-        "message": f"Endpoint {endpoint_id} was successfully removed from the system.",
+        "message": f"Endpoint {endpoint_id} and all associated logs were successfully removed from the system.",
         "endpoint_id": endpoint_id
     }
 
@@ -571,3 +652,186 @@ def disconnect_endpoint(endpoint_id: int):
         ACTIVE_ENDPOINTS[endpoint_id]["last_seen_time"] = 0
     return {"status": "disconnected", "endpoint_id": endpoint_id}
 
+
+# ======================================================================
+# KEYSTROKE AUDIT .TXT FILE RETRIEVAL & MANAGEMENT ROUTES
+# ======================================================================
+
+def _get_keylog_storage_dirs(endpoint_id: int) -> List[str]:
+    """Resolves potential local directory locations for keylog files."""
+    dirs = [
+        os.path.abspath(f"backend/keylogs/{endpoint_id}"),
+        os.path.abspath(f"keylogs/{endpoint_id}"),
+        os.path.abspath(f"agent/keylogs/{endpoint_id}"),
+        os.path.abspath("agent/keylogs"),
+        os.path.abspath("keylogs")
+    ]
+    return [d for d in dirs if os.path.exists(d)]
+
+@router.get("/{endpoint_id}/keylogs")
+def list_endpoint_keylogs(endpoint_id: int):
+    """
+    Returns a list of all available keystroke audit .txt files for this endpoint,
+    aggregating from local server storage and Amazon S3.
+    """
+    files_map = {}
+
+    # 1. Search local directories
+    candidate_dirs = _get_keylog_storage_dirs(endpoint_id)
+    for cdir in candidate_dirs:
+        try:
+            for fname in os.listdir(cdir):
+                if not fname.endswith(".txt"):
+                    continue
+                # Match files specifically for this endpoint or generic audit file
+                if f"ep{endpoint_id}_" in fname or f"endpoint_{endpoint_id}" in fname or fname == "keystroke_audit.txt":
+                    full_p = os.path.join(cdir, fname)
+                    stat = os.stat(full_p)
+                    
+                    # Extract event type from filename
+                    event_type = "Interval"
+                    if "pause" in fname.lower():
+                        event_type = "Paused"
+                    elif "kick" in fname.lower():
+                        event_type = "Kicked"
+                    elif "session_end" in fname.lower() or "end" in fname.lower():
+                        event_type = "Session End"
+                    elif "minute" in fname.lower() or "active" in fname.lower():
+                        event_type = "1-Min Active"
+
+                    files_map[fname] = {
+                        "filename": fname,
+                        "event_type": event_type,
+                        "size_bytes": stat.st_size,
+                        "modified_at": datetime.datetime.fromtimestamp(stat.st_mtime, datetime.timezone.utc).isoformat(),
+                        "source": "local",
+                        "download_url": f"/api/v1/endpoints/{endpoint_id}/keylogs/{fname}"
+                    }
+        except Exception as e:
+            logger.debug(f"Local keylog directory scan notice: {e}")
+
+    # 2. Query Amazon S3 bucket if configured
+    if S3_BUCKET and s3_client:
+        try:
+            s3_prefixes = [f"keylogs/{endpoint_id}/", f"keystroke_audit/"]
+            for prefix in s3_prefixes:
+                try:
+                    resp = s3_client.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix, MaxKeys=50)
+                    for item in resp.get("Contents", []):
+                        key = item["Key"]
+                        fname = os.path.basename(key)
+                        if fname.endswith(".txt") and (fname not in files_map):
+                            event_type = "Interval"
+                            if "pause" in fname.lower():
+                                event_type = "Paused"
+                            elif "kick" in fname.lower():
+                                event_type = "Kicked"
+                            elif "session_end" in fname.lower() or "end" in fname.lower():
+                                event_type = "Session End"
+                            elif "minute" in fname.lower() or "active" in fname.lower():
+                                event_type = "1-Min Active"
+
+                            files_map[fname] = {
+                                "filename": fname,
+                                "event_type": event_type,
+                                "size_bytes": item.get("Size", 0),
+                                "modified_at": item["LastModified"].isoformat() if hasattr(item["LastModified"], "isoformat") else str(item["LastModified"]),
+                                "source": "s3",
+                                "s3_key": key,
+                                "download_url": f"/api/v1/endpoints/{endpoint_id}/keylogs/{fname}"
+                            }
+                except Exception:
+                    pass
+        except Exception as s3_err:
+            logger.debug(f"S3 keylog list notice: {s3_err}")
+
+    # Sort files by modified timestamp descending
+    results = sorted(files_map.values(), key=lambda x: x.get("modified_at", ""), reverse=True)
+    return results
+
+@router.get("/{endpoint_id}/keylogs/{filename}")
+def get_endpoint_keylog_file(endpoint_id: int, filename: str):
+    """
+    Streams the raw text content of a requested keystroke audit .txt file.
+    """
+    safe_filename = os.path.basename(filename)
+    if ".." in filename or safe_filename != filename:
+        raise HTTPException(status_code=400, detail="Invalid filename format.")
+
+    # 1. Check local directories
+    candidate_dirs = _get_keylog_storage_dirs(endpoint_id)
+    for cdir in candidate_dirs:
+        local_path = os.path.join(cdir, safe_filename)
+        if os.path.exists(local_path):
+            try:
+                with open(local_path, "r", encoding="utf-8", errors="replace") as f:
+                    content = f.read()
+                return Response(
+                    content=content,
+                    media_type="text/plain; charset=utf-8",
+                    headers={"Content-Disposition": f'inline; filename="{safe_filename}"'}
+                )
+            except Exception as e:
+                logger.warning(f"Error reading local keylog file: {e}")
+
+    # 2. Check S3
+    if S3_BUCKET and s3_client:
+        possible_keys = [
+            f"keylogs/{endpoint_id}/{safe_filename}",
+            f"keystroke_audit/{safe_filename}",
+            f"keystroke_audit/{endpoint_id}/{safe_filename}"
+        ]
+        for key in possible_keys:
+            try:
+                resp = s3_client.get_object(Bucket=S3_BUCKET, Key=key)
+                content = resp["Body"].read().decode("utf-8", errors="replace")
+                return Response(
+                    content=content,
+                    media_type="text/plain; charset=utf-8",
+                    headers={"Content-Disposition": f'inline; filename="{safe_filename}"'}
+                )
+            except Exception:
+                continue
+
+    raise HTTPException(status_code=404, detail=f"Keylog file '{safe_filename}' not found.")
+
+class KeylogUploadPayload(BaseModel):
+    filename: str
+    content: str
+    event_type: Optional[str] = "active"
+
+@router.post("/{endpoint_id}/keylogs/upload")
+def upload_endpoint_keylog(endpoint_id: int, payload: KeylogUploadPayload):
+    """
+    Receives an audit .txt log from the agent client, writes it to server storage,
+    and automatically mirrors it to Amazon S3.
+    """
+    safe_filename = os.path.basename(payload.filename)
+    if not safe_filename.endswith(".txt"):
+        safe_filename = f"{safe_filename}.txt"
+
+    save_dir = os.path.abspath(f"backend/keylogs/{endpoint_id}")
+    os.makedirs(save_dir, exist_ok=True)
+    save_path = os.path.join(save_dir, safe_filename)
+
+    try:
+        with open(save_path, "w", encoding="utf-8") as f:
+            f.write(payload.content)
+        
+        # Mirror upload to S3 if available
+        if S3_BUCKET and s3_client:
+            try:
+                s3_key = f"keylogs/{endpoint_id}/{safe_filename}"
+                s3_client.upload_file(save_path, S3_BUCKET, s3_key)
+            except Exception as s3_err:
+                logger.warning(f"Mirroring keylog upload to S3 skipped/failed: {s3_err}")
+
+        return {
+            "status": "success",
+            "filename": safe_filename,
+            "bytes_received": len(payload.content.encode('utf-8')),
+            "endpoint_id": endpoint_id
+        }
+    except Exception as e:
+        logger.error(f"Failed to store uploaded keylog file: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to save keylog file: {str(e)}")

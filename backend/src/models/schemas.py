@@ -22,6 +22,7 @@ class TelemetryPayload(BaseModel):
     mac_address: Optional[str] = None
     device_fingerprint: Optional[str] = None
     website_url: Optional[str] = None
+    uptime_seconds: Optional[int] = None
 
 class PresignedURLResponse(BaseModel):
     status: str
