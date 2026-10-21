@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer
 from src.ui.consent_modal import ConsentModal
 from src.ui.system_tray import SystemTrayManager
+from src.ui.branding import brand_icon
 from src.core.activity_tracker import ActivityTracker
 from src.core.privacy_filter import PrivacyFilter
 from src.core.crypto_engine import CryptoEngine
@@ -64,7 +65,7 @@ class AgentOrchestrator:
         self.endpoint_name = endpoint_name or socket.gethostname()
         self.endpoint_id = derive_endpoint_id(self.endpoint_name)
         self.server_url = server_url or CONFIG["server_url"]
-        
+
         self.privacy = PrivacyFilter()
         self.sensitive_cooldown_until = 0.0
         self.last_sensitive_reason = "Clean"
@@ -80,7 +81,7 @@ class AgentOrchestrator:
         self.crypto = CryptoEngine(CONFIG["crypto_key_hex"])
         self.api = TelemetryAPIClient(self.server_url)
         self.tray = SystemTrayManager(self.app)
-        
+
         self.is_suspended = False
         self.tick_counter = 0
 
@@ -145,7 +146,7 @@ class AgentOrchestrator:
         if paused:
             # 1. Stop keyboard listener immediately on first line - eliminates lag completely
             self.tracker.set_keystrokes_enabled(False)
-            
+
             # 2. Snapshot file creation & upload run in background daemon thread
             def _async_pause_save():
                 saved_file = self.tracker.save_snapshot_to_file(reason="pause")
@@ -188,7 +189,7 @@ class AgentOrchestrator:
 
         # 1. Environment DLP check (window title and process)
         is_sensitive, status_msg = self.privacy.evaluate_environment(active_proc, active_title)
-        
+
         # 2. Reactive stream DLP check (active typing in tracker)
         is_stream_sensitive, stream_reason = self.tracker.is_sensitive_active(cooldown=30.0)
         if is_stream_sensitive and not is_sensitive:
@@ -242,7 +243,7 @@ class AgentOrchestrator:
         res = self.api.transmit_telemetry(payload)
         if res and res.get("upload_error"):
             print(f"Screenshot upload unavailable: {res['upload_error']}")
-        
+
         # Check if endpoint was de-authorized or kicked by fleet administrator
         if res and res.get("status") == "kicked":
             print(f"[!] Workstation {self.endpoint_name} (ID: {self.endpoint_id}) was kicked by administrator. Shutting down agent.")
@@ -276,13 +277,15 @@ class AgentOrchestrator:
 
 def main():
     qt_app = QApplication(sys.argv)
+    qt_app.setApplicationName("SecureSight")
+    qt_app.setWindowIcon(brand_icon())
     qt_app.setQuitOnLastWindowClosed(False)
 
     modal = ConsentModal()
     if modal.exec() == ConsentModal.DialogCode.Accepted:
         orchestrator = AgentOrchestrator(
-            qt_app, 
-            server_url=modal.server_url, 
+            qt_app,
+            server_url=modal.server_url,
             endpoint_name=modal.endpoint_name
         )
         orchestrator.start()

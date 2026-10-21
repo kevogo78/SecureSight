@@ -15,6 +15,7 @@ pyinstaller \
     --onefile \
     --windowed \
     --add-data "config:config" \
+    --add-data "assets:assets" \
     --distpath "dist" \
     --workpath "build" \
     run_agent.py

@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
-from PyQt6.QtGui import QIcon, QPixmap, QColor
 from PyQt6.QtCore import pyqtSignal, QObject
+from .branding import brand_icon
 
 class SystemTrayManager(QObject):
     stop_requested = pyqtSignal()
@@ -11,10 +11,8 @@ class SystemTrayManager(QObject):
         self.app = app
         self.is_paused = False
 
-        # Generate a lightweight programatic status icon
-        pixmap = QPixmap(16, 16)
-        pixmap.fill(QColor("green"))
-        self.tray = QSystemTrayIcon(QIcon(pixmap), self.app)
+        self.tray = QSystemTrayIcon(brand_icon(), self.app)
+        self.tray.setToolTip("SecureSight — Monitoring active")
 
         self.menu = QMenu()
         self.menu.setStyleSheet("""
@@ -55,6 +53,7 @@ class SystemTrayManager(QObject):
 
     def toggle_pause(self):
         self.is_paused = not self.is_paused
+        self.tray.setToolTip("SecureSight — Monitoring paused" if self.is_paused else "SecureSight — Monitoring active")
         if self.is_paused:
             self.status_action.setText("Status: Suspended (User)")
             self.pause_action.setText("Resume Monitoring")

@@ -425,6 +425,7 @@ export default function App() {
         onClose={() => setIsAddEndpointOpen(false)}
         onAddEndpoint={handleAddEndpoint}
       />
+
     </div>
   );
 }

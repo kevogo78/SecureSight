@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import api from '../services/api';
-import { Shield, Lock, User, Eye, EyeOff, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
 
 export default function LoginPage({ onLogin }) {
   const [username, setUsername] = useState('');
@@ -32,12 +32,8 @@ export default function LoginPage({ onLogin }) {
       <div className="w-full max-w-md bg-slate-900/90 border border-emerald-900/50 rounded-2xl p-8 shadow-2xl relative z-10 backdrop-blur-md">
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-emerald-400 p-0.5 shadow-lg shadow-emerald-950/50 flex items-center justify-center mb-4">
-            <div className="w-full h-full bg-[#0a2312] rounded-[14px] flex items-center justify-center">
-              <Shield className="w-8 h-8 text-emerald-400" />
-            </div>
-          </div>
-          <h1 className="text-2xl font-black text-white tracking-tight">Endpoint Privacy Monitor</h1>
+          <img src="/branding/securesight-logo.png" alt="SecureSight — Visibility. Security. Control." className="w-full max-w-sm h-auto mb-3" />
+          <h1 className="sr-only">SecureSight Administrator Portal</h1>
           <p className="text-xs font-semibold text-emerald-400/90 mt-1 uppercase tracking-wider">
             ITEC 4810 Capstone • Administrator Portal
           </p>

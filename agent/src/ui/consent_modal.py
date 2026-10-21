@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QPalette, QColor
+from .branding import brand_icon
 
 MODAL_STYLESHEET = """
 QDialog {
@@ -118,8 +119,9 @@ class ConsentModal(QDialog):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle("Endpoint Privacy Observability — Consent Authorization")
-        self.setFixedSize(560, 520)
+        self.setWindowTitle("SecureSight - Monitoring Consent")
+        self.setWindowIcon(brand_icon())
+        self.setFixedSize(560, 620)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         self.setStyleSheet(MODAL_STYLESHEET)
 
@@ -128,7 +130,7 @@ class ConsentModal(QDialog):
         layout.setSpacing(14)
 
         # Header with branding badge
-        header_badge = QLabel("ENDPOINT PRIVACY MONITOR • ITEC 4810 CAPSTONE")
+        header_badge = QLabel("SECURESIGHT • ITEC 4810 CAPSTONE")
         header_badge.setStyleSheet("color: #34d399; font-size: 10px; font-weight: 800; letter-spacing: 1px;")
         layout.addWidget(header_badge)
 
@@ -138,7 +140,8 @@ class ConsentModal(QDialog):
 
         subtitle = QLabel(
             "This endpoint is enrolled in automated cybersecurity auditing and fleet observability. "
-            "All captured telemetry is governed by client-side zero-knowledge safeguards:"
+            "Monitoring includes active applications, resource metrics, keystroke logs, periodic "
+            "screenshots of the default screen. Encrypted screenshots are uploaded for administrator review."
         )
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: #94a3b8; font-size: 12px; line-height: 1.4;")
@@ -151,12 +154,12 @@ class ConsentModal(QDialog):
         card_layout.setContentsMargins(14, 12, 14, 12)
         card_layout.setSpacing(8)
 
-        item1 = QLabel("<b>• Client-Side DLP Redaction:</b> Active windows, banking portals, and password fields are masked automatically prior to transmission.")
+        item1 = QLabel("<b>• Privacy Filters:</b> Known sensitive applications, titles, and input patterns suppress capture. Not every sensitive field can be detected.")
         item1.setWordWrap(True)
         item1.setStyleSheet("color: #a7f3d0; font-size: 11px;")
         card_layout.addWidget(item1)
 
-        item2 = QLabel("<b>• Privacy-Preserving Telemetry:</b> Raw keystroke characters are never collected; only aggregate input intensity (KPM) is recorded.")
+        item2 = QLabel("<b>• Keystroke Auditing:</b> Keystroke text is collected in audit logs with the agent's privacy filters, alongside aggregate input intensity (KPM).")
         item2.setWordWrap(True)
         item2.setStyleSheet("color: #a7f3d0; font-size: 11px;")
         card_layout.addWidget(item2)
@@ -225,4 +228,4 @@ class ConsentModal(QDialog):
         name = self.name_input.text().strip()
         if name:
             self.endpoint_name = name
-        self.accept()
+        self.accept()

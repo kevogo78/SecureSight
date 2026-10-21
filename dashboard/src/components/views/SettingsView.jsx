@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Settings, Key, Shield, Sliders, RefreshCw, Copy, Check, 
+import {
+  Settings, Key, Shield, Sliders, RefreshCw, Copy, Check,
   Plus, Trash2, Globe, Wifi, CheckCircle2, AlertCircle, Save,
-  FileText, Video, Lock, AlertTriangle, Edit3, X, Play, Filter,
+  FileText, Lock, AlertTriangle, Edit3, X, Play, Filter,
   Search, Tag, ShieldAlert, ShieldCheck, Terminal, Cpu
 } from 'lucide-react';
-import { 
-  checkBackendHealth, 
-  fetchPrivacyRulesApi, 
-  createPrivacyRuleApi, 
-  updatePrivacyRuleApi, 
-  deletePrivacyRuleApi, 
-  testPrivacyRuleApi 
+import {
+  checkBackendHealth,
+  fetchPrivacyRulesApi,
+  createPrivacyRuleApi,
+  updatePrivacyRuleApi,
+  deletePrivacyRuleApi,
+  testPrivacyRuleApi
 } from '../../services/api';
 
 const DEFAULT_FALLBACK_RULES = [
@@ -372,7 +372,7 @@ export default function SettingsView() {
     return rules.filter(r => {
       const matchCat = selectedCategory === 'all' || r.category === selectedCategory;
       const q = searchQuery.toLowerCase();
-      const matchSearch = !q || 
+      const matchSearch = !q ||
         (r.name && r.name.toLowerCase().includes(q)) ||
         (r.pattern && r.pattern.toLowerCase().includes(q)) ||
         (r.reason && r.reason.toLowerCase().includes(q)) ||
@@ -424,7 +424,7 @@ export default function SettingsView() {
         <div>
           <h3 className="text-xl font-bold tracking-tight text-slate-900">System &amp; Privacy Configuration</h3>
           <p className="text-xs text-slate-500">
-            Configure endpoint telemetry intervals, keystroke capture options, session video recordings, and dynamic DLP privacy rules.
+            Configure endpoint telemetry intervals, keystroke capture options, screenshots, and dynamic DLP privacy rules.
           </p>
         </div>
 
@@ -637,8 +637,8 @@ export default function SettingsView() {
                   </tr>
                 ) : (
                   filteredRules.map((rule) => (
-                    <tr 
-                      key={rule.rule_id} 
+                    <tr
+                      key={rule.rule_id}
                       className={`hover:bg-slate-50/80 transition ${
                         !rule.enabled ? 'opacity-60 bg-slate-50/40' : ''
                       }`}
@@ -696,7 +696,7 @@ export default function SettingsView() {
                             {rule.replacement || '[REDACTED]'}
                           </span>
                           <span className="text-[10px] text-slate-400 uppercase font-bold">
-                            {rule.action === 'mask_and_block' ? 'Redact & Suppress' : 
+                            {rule.action === 'mask_and_block' ? 'Redact & Suppress' :
                              rule.action === 'mask' ? 'Redact Only' : 'Suppress Screen'}
                           </span>
                         </div>
@@ -721,8 +721,8 @@ export default function SettingsView() {
                           </button>
 
                           {rule.is_builtin ? (
-                            <span 
-                              title="Built-in core rules cannot be deleted. You may disable them." 
+                            <span
+                              title="Built-in core rules cannot be deleted. You may disable them."
                               className="p-1.5 text-slate-300 cursor-not-allowed"
                             >
                               <Lock className="w-3.5 h-3.5" />
@@ -897,7 +897,7 @@ export default function SettingsView() {
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {sandboxResult.matched_reasons.map((reason, idx) => (
-                    <span 
+                    <span
                       key={idx}
                       className="px-2 py-0.5 bg-purple-200/70 text-purple-900 font-mono text-[10px] font-bold rounded border border-purple-300"
                     >
@@ -938,7 +938,7 @@ export default function SettingsView() {
 
         {pingStatus && (
           <div className={`p-3.5 rounded-xl border flex items-center gap-3 text-xs ${
-            pingStatus.connected 
+            pingStatus.connected
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
               : 'bg-amber-50 border-amber-200 text-amber-800'
           }`}>
@@ -953,7 +953,7 @@ export default function SettingsView() {
               </p>
               <p className="text-[11px] opacity-90 mt-0.5">
                 {pingStatus.connected
-                  ? `Response latency: ${pingStatus.latency}ms • Status: ${pingStatus.data?.status || 'healthy'}`
+                  ? `Response latency: ${pingStatus.latency}ms â€¢ Status: ${pingStatus.data?.status || 'healthy'}`
                   : `Notice: ${pingStatus.error}. Dashboard active via cached telemetry.`
                 }
               </p>

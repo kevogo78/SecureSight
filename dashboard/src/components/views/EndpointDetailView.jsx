@@ -1,28 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Monitor, ChevronRight, Cpu, LayoutDashboard, HardDrive, Wifi, 
-  ArrowDown, ArrowUp, Key, Camera, Video, Clock, CheckCircle2, 
+import {
+  Monitor, ChevronRight, Cpu, LayoutDashboard, HardDrive, Wifi,
+  ArrowDown, ArrowUp, Key, Camera, Clock, CheckCircle2,
   ShieldCheck, AlertTriangle, ExternalLink, Globe, FileText, ArrowLeft,
   UserX, Download, Eye, RefreshCw, X, Trash2, CheckSquare, Square
 } from 'lucide-react';
-import { 
-  fetchEndpointKeylogsApi, 
+import {
+  fetchEndpointKeylogsApi,
   fetchKeylogContentApi,
   deleteEndpointKeylogApi,
   batchDeleteEndpointKeylogsApi,
   deleteScreenshotApi,
   batchDeleteScreenshotsApi
 } from '../../services/api';
-import { 
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar 
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar
 } from 'recharts';
 import ActivityHeatmap from '../ActivityHeatmap';
 
-export default function EndpointDetailView({ 
-  endpoint, 
-  onBack, 
-  logs = [], 
-  onViewScreenshot, 
+export default function EndpointDetailView({
+  endpoint,
+  onBack,
+  logs = [],
+  onViewScreenshot,
   onKickEndpoint,
   onDeleteScreenshot
 }) {
@@ -105,7 +105,7 @@ export default function EndpointDetailView({
   };
 
   const handleToggleSelectKeylog = (filename) => {
-    setSelectedKeylogs(prev => 
+    setSelectedKeylogs(prev =>
       prev.includes(filename) ? prev.filter(f => f !== filename) : [...prev, filename]
     );
   };
@@ -161,7 +161,7 @@ export default function EndpointDetailView({
 
   const handleToggleSelectScreenshot = (logId, e) => {
     e.stopPropagation();
-    setSelectedScreenshots(prev => 
+    setSelectedScreenshots(prev =>
       prev.includes(logId) ? prev.filter(id => id !== logId) : [...prev, logId]
     );
   };
@@ -227,8 +227,8 @@ export default function EndpointDetailView({
       {/* Breadcrumb Navigation */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-          <button 
-            onClick={onBack} 
+          <button
+            onClick={onBack}
             className="flex items-center gap-1 hover:text-emerald-600 font-semibold cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -411,7 +411,7 @@ export default function EndpointDetailView({
             <div>
               <h4 className="font-bold text-sm text-slate-900 mb-1">Active Window &amp; DLP State</h4>
               <p className="text-xs text-slate-500 mb-4">Real-time foreground activity inspection</p>
-              
+
               <div className="space-y-4">
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                   <div className="text-[11px] font-semibold text-slate-500">Foreground Process</div>
@@ -676,8 +676,7 @@ export default function EndpointDetailView({
               </div>
             )}
           </div>
-
-          {/* Audit Notice Box */}
+{/* Audit Notice Box */}
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-3">
             <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
             <div className="text-xs text-slate-700 leading-relaxed">
@@ -777,7 +776,7 @@ export default function EndpointDetailView({
                   >
                     {/* Top overlay action bar */}
                     <div className="absolute top-2 left-2 right-2 z-10 flex items-center justify-between">
-                      <div 
+                      <div
                         onClick={(e) => handleToggleSelectScreenshot(log.log_id, e)}
                         className="bg-black/60 hover:bg-black/80 text-white p-1.5 rounded-lg flex items-center justify-center transition cursor-pointer backdrop-blur-sm"
                         title={isSelected ? "Deselect capture" : "Select capture"}
