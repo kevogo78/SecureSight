@@ -69,7 +69,7 @@ export default function FleetOverviewView({
           <div>
             <div className="text-xs font-semibold text-slate-500">Fleet Endpoints</div>
             <div className="text-3xl font-black text-[#15803d] mt-2">{totalCount}</div>
-            <div className="text-[11px] text-slate-500 mt-1">View All Workstations →</div>
+            <div className="text-[11px] text-slate-500 mt-1">View All Workstations &rarr;</div>
           </div>
           <div className="p-3 bg-slate-100 rounded-xl text-slate-700">
             <Monitor className="w-7 h-7" />
@@ -97,7 +97,7 @@ export default function FleetOverviewView({
           <div>
             <div className="text-xs font-semibold text-slate-500">Offline / Suspended</div>
             <div className="text-3xl font-black text-slate-900 mt-2">{offlineCount}</div>
-            <div className="text-[11px] text-slate-500 mt-1">Connection history →</div>
+            <div className="text-[11px] text-slate-500 mt-1">Connection history &rarr;</div>
           </div>
           <div className="p-3 bg-slate-100 rounded-xl text-slate-700">
             <Power className="w-7 h-7" />
@@ -111,7 +111,7 @@ export default function FleetOverviewView({
           <div>
             <div className="text-xs font-semibold text-slate-500">Unique Active Apps</div>
             <div className="text-3xl font-black text-[#16a34a] mt-2">{uniqueAppsCount}</div>
-            <div className="text-[11px] text-slate-500 mt-1">View Activity Feed →</div>
+            <div className="text-[11px] text-slate-500 mt-1">View Activity Feed &rarr;</div>
           </div>
           <div className="p-3 bg-slate-100 rounded-xl text-slate-700">
             <LayoutDashboard className="w-7 h-7" />
