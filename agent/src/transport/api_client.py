@@ -72,17 +72,6 @@ class TelemetryAPIClient:
             print(f"S3 Media upload transport error: {type(e).__name__}")
             return False
 
-    def request_recording_upload(self, payload):
-        url = self.server_url.replace('/telemetry', '/recordings/upload-url')
-        try:
-            response = requests.post(url, json=payload, timeout=10)
-            if response.status_code == 200:
-                return response.json()
-            print(f"Recording upload request rejected: HTTP {response.status_code}. Check backend migration/registration.")
-        except requests.exceptions.RequestException:
-            print("Recording upload request transport failed")
-        return None
-
     def confirm_media_upload(self, path: str) -> bool:
         # Use the configured API origin; never print the signed upload URL.
         origin = self.server_url.split('/api/v1/')[0]

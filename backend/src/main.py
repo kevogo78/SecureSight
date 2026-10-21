@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routes import telemetry, audit, presigned, endpoints, auth, media, recordings, privacy
+from .routes import telemetry, audit, presigned, endpoints, auth, media, privacy
 
 app = FastAPI(
     title="Privacy-Centric Monitoring API",
@@ -40,7 +40,6 @@ app.include_router(presigned.router)
 app.include_router(endpoints.router)
 app.include_router(auth.router)
 app.include_router(media.router)
-app.include_router(recordings.router)
 app.include_router(privacy.router)
 
 @app.get("/health")

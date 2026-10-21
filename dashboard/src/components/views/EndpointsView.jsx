@@ -204,7 +204,7 @@ export default function EndpointsView({
           <div>
             <div className="text-xs font-semibold text-slate-500">Connected Endpoints</div>
             <div className="text-3xl font-black text-[#15803d] mt-2">{totalConnected}</div>
-            <div className="text-[11px] text-emerald-600 font-medium mt-1">Live streaming →</div>
+            <div className="text-[11px] text-emerald-600 font-medium mt-1">Active telemetry →</div>
           </div>
           <div className="p-3 bg-emerald-50 rounded-xl text-emerald-700">
             <Monitor className="w-7 h-7" />

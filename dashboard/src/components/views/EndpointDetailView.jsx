@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Monitor, ChevronRight, Cpu, LayoutDashboard, HardDrive, Wifi,
-  ArrowDown, ArrowUp, Key, Camera, Video, Clock, CheckCircle2,
+  ArrowDown, ArrowUp, Key, Camera, Clock, CheckCircle2,
   ShieldCheck, AlertTriangle, ExternalLink, Globe, FileText, ArrowLeft,
   UserX, Download, Eye, RefreshCw, X, Trash2, CheckSquare, Square
 } from 'lucide-react';
@@ -23,7 +23,6 @@ export default function EndpointDetailView({
   onBack,
   logs = [],
   onViewScreenshot,
-  onViewRecording,
   onKickEndpoint,
   onDeleteScreenshot
 }) {
@@ -294,13 +293,6 @@ export default function EndpointDetailView({
             <span>Latest Capture</span>
           </button>
           <button
-            onClick={onViewRecording}
-            className="px-3.5 py-2 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
-          >
-            <Video className="w-4 h-4" />
-            <span>Video Recordings</span>
-          </button>
-          <button
             onClick={() => {
               if (window.confirm(`Are you sure you want to kick and disconnect "${endpoint.name}" from active monitoring?`)) {
                 onKickEndpoint(endpoint.endpoint_id);
@@ -323,7 +315,7 @@ export default function EndpointDetailView({
           { id: 'applications', label: 'Applications' },
           { id: 'timeline', label: 'Activity Index & DLP Timeline' },
           { id: 'keylogs', label: 'Keylogs' },
-          { id: 'screenshots', label: 'Screenshots & Recordings' },
+          { id: 'screenshots', label: 'Screenshots' },
           { id: 'system', label: 'System Usage' },
         ].map((tab) => (
           <button
@@ -506,12 +498,6 @@ export default function EndpointDetailView({
                 <span className={`w-2 h-2 rounded-full ${captureKeysToFile ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
                 {captureKeysToFile ? 'Keystrokes: ACTIVE' : 'Keystrokes: PAUSED'}
               </span>
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-                'bg-blue-50 text-blue-700 border border-blue-200'
-              }`}>
-                <span className={`w-2 h-2 rounded-full ${'bg-blue-500'}`} />
-                Video: periodic clips
-              </span>
             </div>
           </div>
 
@@ -590,13 +576,6 @@ export default function EndpointDetailView({
               </div>
             </div>
 
-            {/* Video configuration is owned by the consenting endpoint agent. */}
-            <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/40">
-              <div className="text-xs font-bold text-slate-900">Video Recordings</div>
-              <p className="text-[11px] text-slate-500 mt-1">15-second clips every 5 minutes after agent consent. Default screen, 720p maximum, 2 FPS, no audio.</p>
-              <p className="text-[11px] text-slate-500 mt-1">Pause or revoke monitoring from the endpoint tray. Browser settings do not control the recorder.</p>
-              <button onClick={onViewRecording} className="mt-3 text-xs text-blue-700 font-bold hover:underline">View recordings</button>
-            </div>
             {isLoadingKeylogs ? (
               <div className="text-center py-6 text-slate-400 text-xs font-medium">Loading keylog files...</div>
             ) : keylogFiles.length === 0 ? (
@@ -738,7 +717,7 @@ export default function EndpointDetailView({
         </div>
       )}
 
-      {/* SUB-TAB CONTENT 5: SCREENSHOTS & RECORDINGS */}
+      {/* SUB-TAB CONTENT 5: SCREENSHOTS */}
       {activeSubTab === 'screenshots' && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -777,11 +756,6 @@ export default function EndpointDetailView({
                 </button>
               )}
             </div>
-          </div>
-
-          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
-            <span>Video: 15-second recorded clips, 2 FPS, no audio. Controlled by agent consent.</span>
-            <button onClick={onViewRecording} className="text-emerald-700 font-bold hover:underline">View video recordings</button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-2">

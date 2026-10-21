@@ -141,8 +141,7 @@ class ConsentModal(QDialog):
         subtitle = QLabel(
             "This endpoint is enrolled in automated cybersecurity auditing and fleet observability. "
             "Monitoring includes active applications, resource metrics, keystroke logs, periodic "
-            "screenshots, and automatic 15-second screen recordings every 5 minutes "
-            "(default screen, no audio). Encrypted captures are uploaded for administrator review."
+            "screenshots of the default screen. Encrypted screenshots are uploaded for administrator review."
         )
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: #94a3b8; font-size: 12px; line-height: 1.4;")
@@ -165,7 +164,7 @@ class ConsentModal(QDialog):
         item2.setStyleSheet("color: #a7f3d0; font-size: 11px;")
         card_layout.addWidget(item2)
 
-        item3 = QLabel("<b>• Revocable Consent:</b> Recording status is visible in the tray. Pause or revoke monitoring there to cancel an in-progress clip.")
+        item3 = QLabel("<b>• Revocable Consent:</b> Workstation auditing can be paused or terminated at any time via the system tray icon.")
         item3.setWordWrap(True)
         item3.setStyleSheet("color: #a7f3d0; font-size: 11px;")
         card_layout.addWidget(item3)

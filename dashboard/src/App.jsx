@@ -3,7 +3,6 @@ import LoginPage from './components/LoginPage';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import ScreenshotModal from './components/ScreenshotModal';
-import SessionPlayerModal from './components/SessionPlayerModal';
 import api from './services/api';
 import AddEndpointModal from './components/AddEndpointModal';
 
@@ -67,7 +66,6 @@ export default function App() {
 
   // Modals
   const [activeCapture, setActiveCapture] = useState(null);
-  const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
   const [isAddEndpointOpen, setIsAddEndpointOpen] = useState(false);
 
   // Polling loop: fetch endpoints and telemetry logs every 5 seconds when authenticated
@@ -388,7 +386,6 @@ export default function App() {
               onViewScreenshot={setActiveCapture}
               onKickEndpoint={handleKickEndpoint}
               onDeleteScreenshot={handleDeleteScreenshots}
-              onViewRecording={() => setIsRecordingModalOpen(true)}
             />
           )}
 
@@ -429,13 +426,6 @@ export default function App() {
         onAddEndpoint={handleAddEndpoint}
       />
 
-      {/* 3. Encrypted Session Screen Stream Player Modal */}
-      <SessionPlayerModal
-        isOpen={isRecordingModalOpen}
-        onClose={() => setIsRecordingModalOpen(false)}
-        endpointId={selectedEndpoint?.endpoint_id}
-        endpointName={selectedEndpoint?.name || 'WORKSTATION-WIN11'}
-      />
     </div>
   );
 }

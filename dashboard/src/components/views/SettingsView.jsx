@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Settings, Key, Shield, Sliders, RefreshCw, Copy, Check,
   Plus, Trash2, Globe, Wifi, CheckCircle2, AlertCircle, Save,
-  FileText, Video, Lock, AlertTriangle, Edit3, X, Play, Filter,
+  FileText, Lock, AlertTriangle, Edit3, X, Play, Filter,
   Search, Tag, ShieldAlert, ShieldCheck, Terminal, Cpu
 } from 'lucide-react';
 import {
@@ -424,7 +424,7 @@ export default function SettingsView() {
         <div>
           <h3 className="text-xl font-bold tracking-tight text-slate-900">System &amp; Privacy Configuration</h3>
           <p className="text-xs text-slate-500">
-            Configure endpoint telemetry intervals, keystroke capture options, session video recordings, and dynamic DLP privacy rules.
+            Configure endpoint telemetry intervals, keystroke capture options, screenshots, and dynamic DLP privacy rules.
           </p>
         </div>
 
@@ -438,11 +438,6 @@ export default function SettingsView() {
       </div>
 
       {/* Telemetry Timers & Master Encryption Key */}
-      <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
-        <h4 className="text-sm font-bold text-slate-900">Video Recordings</h4>
-        <p className="text-xs text-slate-600 mt-2">After consent, the agent records 15-second clips every 5 minutes, at up to 720p and 2 FPS without audio. Pause or revoke monitoring from the endpoint tray to stop recording.</p>
-        <p className="text-xs text-slate-500 mt-2">Review uploaded clips from the endpoint's Video Recordings button. Recording settings are configured on the agent.</p>
-      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Section 1: Agent Polling & Timers */}
         <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm space-y-4">

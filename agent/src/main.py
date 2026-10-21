@@ -18,7 +18,7 @@ try:
 except ImportError:
     pass
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer, QObject, pyqtSignal
+from PyQt6.QtCore import QTimer
 from src.ui.consent_modal import ConsentModal
 from src.ui.system_tray import SystemTrayManager
 from src.ui.branding import brand_icon
@@ -26,7 +26,6 @@ from src.core.activity_tracker import ActivityTracker
 from src.core.privacy_filter import PrivacyFilter
 from src.core.crypto_engine import CryptoEngine
 from src.core.screen_capture import ScreenCaptureEngine
-from src.core.video_recorder import RecordingWorker
 from src.transport.api_client import TelemetryAPIClient
 
 # Default static demo configuration
@@ -60,10 +59,6 @@ def derive_endpoint_id(name: str) -> int:
     # Deterministic positive integer between 10 and 999
     return (zlib.crc32(clean.encode('utf-8')) % 990) + 10
 
-class RecordingEvents(QObject):
-    status = pyqtSignal(str)
-
-
 class AgentOrchestrator:
     def __init__(self, qt_app, server_url: str = None, endpoint_name: str = None):
         self.app = qt_app
@@ -89,15 +84,6 @@ class AgentOrchestrator:
 
         self.is_suspended = False
         self.tick_counter = 0
-        self.stopping = False
-        self.recording_events = RecordingEvents()
-        self.recording_events.status.connect(self.tray.update_recording_status)
-        self.recorder = RecordingWorker(self.recording_allowed, self.crypto, self.api,
-                                        self.endpoint_id, self.recording_events.status.emit)
-        self.record_timer = QTimer()
-        self.record_timer.setInterval(5 * 60 * 1000)
-        self.record_timer.timeout.connect(self.recorder.start)
-        self.app.aboutToQuit.connect(self.cancel_recording)
 
         self.tray.stop_requested.connect(self.terminate)
         self.tray.pause_requested.connect(self.handle_manual_pause)
@@ -117,31 +103,6 @@ class AgentOrchestrator:
         self.timer.start(CONFIG["interval_ms"])
         # Transmit initial telemetry handshake packet immediately upon start
         QTimer.singleShot(600, self.execute_polling_loop)
-        if os.getenv("SECURESIGHT_VIDEO_ENABLED", "true").lower() == "true":
-            self.record_timer.start()
-            QTimer.singleShot(1500, self.recorder.start)
-
-    def recording_allowed(self):
-        if self.stopping or self.is_suspended:
-            return False
-        if time.time() < self.sensitive_cooldown_until:
-            return False
-        stream_sensitive, _ = self.tracker.is_sensitive_active(cooldown=30.0)
-        if stream_sensitive:
-            return False
-        window = self.tracker.get_active_window()
-        process = window.get("app_name", "")
-        title = window.get("window_title_raw", "")
-        if not process or process in ("Unknown", "System Process"):
-            return False  # Fail closed when foreground detection is unavailable.
-        sensitive, _ = self.privacy.evaluate_environment(process, title)
-        secret, _ = self.privacy.scan_clipboard_for_dlp(title)
-        return not sensitive and not secret
-
-    def cancel_recording(self):
-        self.stopping = True
-        self.record_timer.stop()
-        self.recorder.cancel()
 
     def register_endpoint(self):
         """Notifies fleet backend of newly consented workstation."""
@@ -185,7 +146,6 @@ class AgentOrchestrator:
         if paused:
             # 1. Stop keyboard listener immediately on first line - eliminates lag completely
             self.tracker.set_keystrokes_enabled(False)
-            self.recorder.cancel()
 
             # 2. Snapshot file creation & upload run in background daemon thread
             def _async_pause_save():
@@ -301,7 +261,6 @@ class AgentOrchestrator:
                 print(f"S3 database confirmation {'completed' if verified else 'failed'}")
 
     def terminate(self, is_kicked: bool = False):
-        self.cancel_recording()
         self.timer.stop()
         self.tracker.set_keystrokes_enabled(False)
         if not is_kicked:

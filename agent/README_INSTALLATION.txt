@@ -60,7 +60,7 @@ Option B: Terminal Execution
    • The workstation immediately appears in the fleet table and overview cards.
    • Real-time telemetry, active applications, CPU%, RAM%, and keystroke
      intensity (KPM) will stream live.
-   • Session recordings and decrypted screenshots can be inspected.
+   • Decrypted screenshots can be inspected.
 
 ---------------------------------------------------------------------
 4. FLEET CONTROLS & KICK FEATURE
@@ -68,8 +68,6 @@ Option B: Terminal Execution
 • Keystroke Audit Logging Toggle:
   Toggle hardware keystrokes on/off directly from the dashboard. When
   enabled, unmasked keystrokes are recorded to `agent/keystrokes_audit.txt`.
-• Session Screen Recording Toggle:
-  Toggle session screen streaming on/off (720p @ 1 FPS).
 • Kick / De-authorize Endpoint:
   Click the red "Kick" button on any workstation to immediately terminate
   its monitoring session. The agent receives the de-authorization signal
