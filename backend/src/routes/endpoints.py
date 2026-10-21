@@ -680,33 +680,42 @@ def list_endpoint_keylogs(endpoint_id: int):
     candidate_dirs = _get_keylog_storage_dirs(endpoint_id)
     for cdir in candidate_dirs:
         try:
+            norm_cdir = cdir.replace("\\", "/")
+            is_endpoint_dir = norm_cdir.endswith(f"/{endpoint_id}") or f"keylogs/{endpoint_id}" in norm_cdir
             for fname in os.listdir(cdir):
                 if not fname.endswith(".txt"):
                     continue
-                # Match files specifically for this endpoint or generic audit file
-                if f"ep{endpoint_id}_" in fname or f"endpoint_{endpoint_id}" in fname or fname == "keystroke_audit.txt":
-                    full_p = os.path.join(cdir, fname)
-                    stat = os.stat(full_p)
-                    
-                    # Extract event type from filename
-                    event_type = "Interval"
-                    if "pause" in fname.lower():
-                        event_type = "Paused"
-                    elif "kick" in fname.lower():
-                        event_type = "Kicked"
-                    elif "session_end" in fname.lower() or "end" in fname.lower():
-                        event_type = "Session End"
-                    elif "minute" in fname.lower() or "active" in fname.lower():
-                        event_type = "1-Min Active"
+                # If directory is dedicated to this endpoint, all .txt files belong to this endpoint.
+                # If shared directory, match endpoint-specific prefixes.
+                if not is_endpoint_dir and not (
+                    f"ep{endpoint_id}_" in fname or 
+                    f"endpoint_{endpoint_id}" in fname or 
+                    fname == "keystroke_audit.txt"
+                ):
+                    continue
+                full_p = os.path.join(cdir, fname)
+                stat = os.stat(full_p)
+                
+                # Extract event type from filename
+                fname_lower = fname.lower()
+                event_type = "Interval"
+                if "pause" in fname_lower:
+                    event_type = "Paused"
+                elif "kick" in fname_lower:
+                    event_type = "Kicked"
+                elif "session_end" in fname_lower or "end" in fname_lower:
+                    event_type = "Session End"
+                elif "1-min" in fname_lower or "minute" in fname_lower or "active" in fname_lower or "min" in fname_lower:
+                    event_type = "1-Min Active"
 
-                    files_map[fname] = {
-                        "filename": fname,
-                        "event_type": event_type,
-                        "size_bytes": stat.st_size,
-                        "modified_at": datetime.datetime.fromtimestamp(stat.st_mtime, datetime.timezone.utc).isoformat(),
-                        "source": "local",
-                        "download_url": f"/api/v1/endpoints/{endpoint_id}/keylogs/{fname}"
-                    }
+                files_map[fname] = {
+                    "filename": fname,
+                    "event_type": event_type,
+                    "size_bytes": stat.st_size,
+                    "modified_at": datetime.datetime.fromtimestamp(stat.st_mtime, datetime.timezone.utc).isoformat(),
+                    "source": "local",
+                    "download_url": f"/api/v1/endpoints/{endpoint_id}/keylogs/{fname}"
+                }
         except Exception as e:
             logger.debug(f"Local keylog directory scan notice: {e}")
 
@@ -721,14 +730,15 @@ def list_endpoint_keylogs(endpoint_id: int):
                         key = item["Key"]
                         fname = os.path.basename(key)
                         if fname.endswith(".txt") and (fname not in files_map):
+                            fname_lower = fname.lower()
                             event_type = "Interval"
-                            if "pause" in fname.lower():
+                            if "pause" in fname_lower:
                                 event_type = "Paused"
-                            elif "kick" in fname.lower():
+                            elif "kick" in fname_lower:
                                 event_type = "Kicked"
-                            elif "session_end" in fname.lower() or "end" in fname.lower():
+                            elif "session_end" in fname_lower or "end" in fname_lower:
                                 event_type = "Session End"
-                            elif "minute" in fname.lower() or "active" in fname.lower():
+                            elif "1-min" in fname_lower or "minute" in fname_lower or "active" in fname_lower or "min" in fname_lower:
                                 event_type = "1-Min Active"
 
                             files_map[fname] = {
@@ -835,3 +845,92 @@ def upload_endpoint_keylog(endpoint_id: int, payload: KeylogUploadPayload):
     except Exception as e:
         logger.error(f"Failed to store uploaded keylog file: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to save keylog file: {str(e)}")
+
+
+@router.delete("/{endpoint_id}/keylogs/{filename}")
+def delete_endpoint_keylog(endpoint_id: int, filename: str):
+    """
+    Deletes a specific keystroke audit .txt file from local storage and Amazon S3.
+    """
+    safe_filename = os.path.basename(filename)
+    if ".." in filename or safe_filename != filename:
+        raise HTTPException(status_code=400, detail="Invalid filename format.")
+
+    deleted_local = False
+    candidate_dirs = _get_keylog_storage_dirs(endpoint_id)
+    for cdir in candidate_dirs:
+        local_path = os.path.join(cdir, safe_filename)
+        if os.path.exists(local_path):
+            try:
+                os.remove(local_path)
+                deleted_local = True
+            except Exception as e:
+                logger.warning(f"Failed to delete local keylog {local_path}: {e}")
+
+    deleted_s3 = False
+    if S3_BUCKET and s3_client:
+        possible_keys = [
+            f"keylogs/{endpoint_id}/{safe_filename}",
+            f"keystroke_audit/{safe_filename}",
+            f"keystroke_audit/{endpoint_id}/{safe_filename}"
+        ]
+        for key in possible_keys:
+            try:
+                s3_client.delete_object(Bucket=S3_BUCKET, Key=key)
+                deleted_s3 = True
+            except Exception:
+                pass
+
+    return {
+        "status": "success",
+        "message": f"Keylog file '{safe_filename}' deleted.",
+        "filename": safe_filename,
+        "deleted_local": deleted_local,
+        "deleted_s3": deleted_s3
+    }
+
+
+class BatchDeleteKeylogsPayload(BaseModel):
+    filenames: List[str]
+
+
+@router.post("/{endpoint_id}/keylogs/batch-delete")
+def batch_delete_endpoint_keylogs(endpoint_id: int, payload: BatchDeleteKeylogsPayload):
+    """
+    Deletes multiple keystroke audit .txt files from local storage and Amazon S3.
+    """
+    deleted_files = []
+    candidate_dirs = _get_keylog_storage_dirs(endpoint_id)
+
+    for filename in payload.filenames:
+        safe_filename = os.path.basename(filename)
+        if ".." in filename or safe_filename != filename:
+            continue
+
+        for cdir in candidate_dirs:
+            local_path = os.path.join(cdir, safe_filename)
+            if os.path.exists(local_path):
+                try:
+                    os.remove(local_path)
+                except Exception as e:
+                    logger.warning(f"Failed to delete local keylog {local_path}: {e}")
+
+        if S3_BUCKET and s3_client:
+            possible_keys = [
+                f"keylogs/{endpoint_id}/{safe_filename}",
+                f"keystroke_audit/{safe_filename}",
+                f"keystroke_audit/{endpoint_id}/{safe_filename}"
+            ]
+            for key in possible_keys:
+                try:
+                    s3_client.delete_object(Bucket=S3_BUCKET, Key=key)
+                except Exception:
+                    pass
+
+        deleted_files.append(safe_filename)
+
+    return {
+        "status": "success",
+        "deleted_count": len(deleted_files),
+        "filenames": deleted_files
+    }

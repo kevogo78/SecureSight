@@ -80,9 +80,11 @@ class ActivityTracker:
         on_sensitive_activity: Optional[Callable[[str], None]] = None,
         keystroke_log_file: str = "agent/keystroke_audit.txt",
         s3_bucket_name: Optional[str] = None,
-        endpoint_id: int = 1
+        endpoint_id: int = 1,
+        endpoint_name: Optional[str] = None
     ):
         self.endpoint_id = endpoint_id
+        self.endpoint_name = endpoint_name or socket.gethostname()
         self.start_time = time.time()
         self.last_minute_save_time = time.time()
         self.privacy_filter = PrivacyFilter()
@@ -102,6 +104,7 @@ class ActivityTracker:
         self._keyboard_listener = None
         self.keystroke_buffer = []  # In-memory recent keys for DLP pattern detection
         self._write_buffer = []     # In-memory buffer for local text file writing
+        self._session_buffer = []   # Complete cumulative typing buffer for the active recording session (from trigger to pause)
         self.s3_bucket_name = s3_bucket_name or os.getenv("S3_BUCKET_NAME", os.getenv("S3_BUCKET"))
         self._s3_client = None
         
@@ -119,15 +122,29 @@ class ActivityTracker:
         """Returns the total elapsed seconds for this agent session."""
         return max(0, int(time.time() - self.start_time))
 
-    def save_snapshot_to_file(self, reason: str = "active") -> Optional[str]:
+    def save_snapshot_to_file(self, reason: str = "1-min") -> Optional[str]:
         """
         Saves a distinct, timestamped keystroke audit .txt file for this endpoint.
-        Triggered every 1 minute while active, upon manual pause, upon being kicked, or upon session end.
+        Format: <endpoint_name>_<YYYYMMDD_HHMMSS>_<trigger>.txt
+        Trigger examples: 1-min, pause, end-session, kicked.
+        Preserves all typing from the moment logging was triggered until paused or ended.
         """
         import datetime
         timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_reason = re.sub(r'[^a-zA-Z0-9_-]', '_', reason.lower())
-        filename = f"keystroke_audit_ep{self.endpoint_id}_{timestamp_str}_{safe_reason}.txt"
+        reason_lower = (reason or "1-min").lower()
+        if "pause" in reason_lower:
+            clean_trigger = "pause"
+        elif "1-min" in reason_lower or "minute" in reason_lower or "1 min" in reason_lower or "active" in reason_lower or "interval" in reason_lower:
+            clean_trigger = "1-min"
+        elif "end" in reason_lower or "session" in reason_lower or "terminate" in reason_lower or "stop" in reason_lower:
+            clean_trigger = "end-session"
+        elif "kick" in reason_lower:
+            clean_trigger = "kicked"
+        else:
+            clean_trigger = re.sub(r'[^a-zA-Z0-9_-]', '_', reason_lower)
+
+        safe_ep_name = re.sub(r'[^a-zA-Z0-9_-]', '_', (self.endpoint_name or f"WORKSTATION-{self.endpoint_id}").strip())
+        filename = f"{safe_ep_name}_{timestamp_str}_{clean_trigger}.txt"
 
         cwd = os.getcwd()
         if os.path.exists(os.path.join(cwd, "agent")):
@@ -141,15 +158,19 @@ class ActivityTracker:
         file_path = os.path.join(keylogs_dir, filename)
 
         with self._lock:
-            buffer_content = "".join(self._write_buffer)
-            if not buffer_content:
-                buffer_content = f"[No keystrokes recorded in this window - Event: {reason}]\n"
+            # Retain all typing from the time it was triggered until now / paused
+            if self._session_buffer:
+                buffer_content = "".join(self._session_buffer)
+            elif self._write_buffer:
+                buffer_content = "".join(self._write_buffer)
+            else:
+                buffer_content = f"[No keystrokes recorded in this window - Event: {clean_trigger}]\n"
             
             header = (
                 f"======================================================================\n"
-                f"KEYSTROKE AUDIT SNAPSHOT - ENDPOINT #{self.endpoint_id}\n"
+                f"KEYSTROKE AUDIT SNAPSHOT - {safe_ep_name} (ENDPOINT #{self.endpoint_id})\n"
                 f"TIMESTAMP: {datetime.datetime.now(datetime.timezone.utc).isoformat()}\n"
-                f"TRIGGER EVENT: {reason.upper()}\n"
+                f"TRIGGER EVENT: {clean_trigger.upper()}\n"
                 f"HOST: {socket.gethostname()} | USER: {getpass.getuser()}\n"
                 f"======================================================================\n\n"
             )
@@ -173,7 +194,7 @@ class ActivityTracker:
                 if parent_dir and not os.path.exists(parent_dir):
                     os.makedirs(parent_dir, exist_ok=True)
                 with open(self.keystroke_log_file, "a", encoding="utf-8") as f_cum:
-                    f_cum.write(buffer_content)
+                    f_cum.write("".join(self._write_buffer) if self._write_buffer else buffer_content)
                     f_cum.flush()
             except Exception:
                 pass
@@ -182,7 +203,7 @@ class ActivityTracker:
 
         s3_key = f"keylogs/{self.endpoint_id}/{filename}"
         self.sync_to_s3(s3_key=s3_key, file_path=file_path)
-        print(f"[ACTIVITY TRACKER] Saved audit snapshot '{filename}' (Reason: {reason}).")
+        print(f"[ACTIVITY TRACKER] Saved audit snapshot '{filename}' (Reason: {clean_trigger}).")
         return file_path
 
     def _trigger_sensitive_event(self, reason: str):
@@ -508,19 +529,21 @@ class ActivityTracker:
 
     def _append_to_audit_log(self, char_to_write: str):
         """Buffers character and writes to the local temporary audit file while keystrokes are active."""
-        if not self.enable_keystrokes or not self.keystroke_log_file:
+        if not self.enable_keystrokes:
             return
         with self._lock:
+            self._session_buffer.append(char_to_write)
             self._write_buffer.append(char_to_write)
-            try:
-                parent_dir = os.path.dirname(os.path.abspath(self.keystroke_log_file))
-                if parent_dir and not os.path.exists(parent_dir):
-                    os.makedirs(parent_dir, exist_ok=True)
-                with open(self.keystroke_log_file, "a", encoding="utf-8") as f:
-                    f.write(char_to_write)
-                    f.flush()
-            except Exception:
-                pass
+            if self.keystroke_log_file:
+                try:
+                    parent_dir = os.path.dirname(os.path.abspath(self.keystroke_log_file))
+                    if parent_dir and not os.path.exists(parent_dir):
+                        os.makedirs(parent_dir, exist_ok=True)
+                    with open(self.keystroke_log_file, "a", encoding="utf-8") as f:
+                        f.write(char_to_write)
+                        f.flush()
+                except Exception:
+                    pass
 
     def flush_buffer(self) -> bool:
         """
@@ -628,35 +651,48 @@ class ActivityTracker:
             print(f"[ACTIVITY TRACKER S3 ERROR] S3 upload failed: {e}")
             return False
 
+    def start_new_session(self):
+        """Resets active session buffer when a new logging interval or run is triggered."""
+        with self._lock:
+            self._session_buffer.clear()
+            self.last_minute_save_time = time.time()
+
     def set_keystrokes_enabled(self, enabled: bool) -> bool:
         """
         Toggles keystroke capture on or off.
         When toggled off:
-          1. Performs a final flush of the buffer to the local text file.
-          2. Executes the S3 upload one last time.
-          3. Safely shuts down the keyboard listener thread.
+          1. Safely shuts down the keyboard listener thread FIRST to immediately halt key recording (zero lag).
+          2. Performs a final flush of the buffer to the local text file.
+          3. Executes the S3 upload one last time.
         """
+        listener_to_stop = None
         with self._lock:
             prev_state = self.enable_keystrokes
             self.enable_keystrokes = enabled
+            if prev_state and not enabled and self._keyboard_listener:
+                listener_to_stop = self._keyboard_listener
+                self._keyboard_listener = None
 
         if prev_state and not enabled:
             print("[ACTIVITY TRACKER] Keystroke logging toggled OFF.")
-            # 1. Final flush of the buffer
-            self.flush_buffer()
-            # 2. Execute S3 upload one last time
-            upload_success = self.sync_to_s3()
-            # 3. Safely shut down the keyboard listener thread
-            if self._keyboard_listener:
+            # 1. Safely shut down keyboard listener IMMEDIATELY so no lingering keystrokes are recorded
+            if listener_to_stop:
                 try:
-                    self._keyboard_listener.stop()
+                    listener_to_stop.stop()
                 except Exception:
                     pass
-                self._keyboard_listener = None
                 print("[ACTIVITY TRACKER] Keyboard listener safely shut down.")
+            
+            # 2. Final flush of the buffer
+            self.flush_buffer()
+            # 3. Execute S3 upload one last time
+            upload_success = self.sync_to_s3()
             return upload_success
         elif not prev_state and enabled:
             print("[ACTIVITY TRACKER] Keystroke logging toggled ON.")
+            # Reset session buffer to record this triggered session from start to pause
+            with self._lock:
+                self._session_buffer.clear()
             if HAS_PYNPUT and not self._keyboard_listener:
                 try:
                     self._keyboard_listener = keyboard.Listener(on_press=self._on_key_press)

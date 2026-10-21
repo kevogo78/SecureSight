@@ -216,6 +216,12 @@ export default function App() {
     }
   };
 
+  const handleDeleteScreenshots = (deletedLogIds) => {
+    if (!Array.isArray(deletedLogIds)) return;
+    const idSet = new Set(deletedLogIds.map(String));
+    setLogs((prev) => prev.filter(l => !idSet.has(String(l.log_id))));
+  };
+
   const handleTogglePauseEndpoint = async (endpointId) => {
     let nowPaused = false;
     setEndpoints((prev) => {
@@ -379,6 +385,7 @@ export default function App() {
               logs={logs}
               onViewScreenshot={setActiveCapture}
               onKickEndpoint={handleKickEndpoint}
+              onDeleteScreenshot={handleDeleteScreenshots}
             />
           )}
 

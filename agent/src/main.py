@@ -6,6 +6,7 @@ import zlib
 import platform
 import getpass
 import requests
+import threading
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer
 from src.ui.consent_modal import ConsentModal
@@ -62,7 +63,8 @@ class AgentOrchestrator:
         self.tracker = ActivityTracker(
             enable_keystrokes=True,
             on_sensitive_activity=self.on_sensitive_input_detected,
-            endpoint_id=self.endpoint_id
+            endpoint_id=self.endpoint_id,
+            endpoint_name=self.endpoint_name
         )
         self.crypto = CryptoEngine(CONFIG["crypto_key_hex"])
         self.api = TelemetryAPIClient(self.server_url)
@@ -104,7 +106,7 @@ class AgentOrchestrator:
                 "mac_address": self.tracker.get_mac_address(),
                 "device_fingerprint": self.tracker.get_device_fingerprint()
             }
-            response = requests.post(reg_url, json=payload, timeout=3)
+            response = requests.post(reg_url, json=payload, timeout=15)
             if response.status_code != 200:
                 print(f"Endpoint registration failed: HTTP {response.status_code}")
         except Exception as e:
@@ -130,18 +132,27 @@ class AgentOrchestrator:
     def handle_manual_pause(self, paused: bool):
         self.is_suspended = paused
         if paused:
-            saved_file = self.tracker.save_snapshot_to_file(reason="paused")
-            if saved_file:
-                self._upload_keylog_file(saved_file)
+            # 1. Stop keyboard listener immediately on first line - eliminates lag completely
             self.tracker.set_keystrokes_enabled(False)
+            
+            # 2. Snapshot file creation & upload run in background daemon thread
+            def _async_pause_save():
+                saved_file = self.tracker.save_snapshot_to_file(reason="pause")
+                if saved_file:
+                    self._upload_keylog_file(saved_file)
+            threading.Thread(target=_async_pause_save, daemon=True).start()
         else:
+            self.tracker.start_new_session()
             self.tracker.set_keystrokes_enabled(True)
-        try:
-            action = "pause" if paused else "resume"
-            pause_url = self.server_url.replace("/telemetry", f"/endpoints/{self.endpoint_id}/{action}")
-            requests.post(pause_url, timeout=2)
-        except Exception:
-            pass
+
+        def _async_notify():
+            try:
+                action = "pause" if paused else "resume"
+                pause_url = self.server_url.replace("/telemetry", f"/endpoints/{self.endpoint_id}/{action}")
+                requests.post(pause_url, timeout=3)
+            except Exception:
+                pass
+        threading.Thread(target=_async_notify, daemon=True).start()
 
     def execute_polling_loop(self):
         self.tick_counter += 1
@@ -149,9 +160,11 @@ class AgentOrchestrator:
         if (now - self.last_minute_file_save) >= 60:
             self.last_minute_file_save = now
             if not self.is_suspended and self.tracker.enable_keystrokes:
-                saved_file = self.tracker.save_snapshot_to_file(reason="1-minute-interval")
-                if saved_file:
-                    self._upload_keylog_file(saved_file)
+                def _async_min_save():
+                    saved_file = self.tracker.save_snapshot_to_file(reason="1-min")
+                    if saved_file:
+                        self._upload_keylog_file(saved_file)
+                threading.Thread(target=_async_min_save, daemon=True).start()
         metrics = self.tracker.get_system_metrics()
         activity = self.tracker.get_and_reset_activity()
         kpm = activity.get("kpm", 0)
@@ -237,7 +250,8 @@ class AgentOrchestrator:
 
     def terminate(self):
         self.timer.stop()
-        saved_file = self.tracker.save_snapshot_to_file(reason="session_end")
+        self.tracker.set_keystrokes_enabled(False)
+        saved_file = self.tracker.save_snapshot_to_file(reason="end-session")
         if saved_file:
             self._upload_keylog_file(saved_file)
         self.tracker.stop()

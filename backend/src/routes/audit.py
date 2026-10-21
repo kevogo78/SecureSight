@@ -42,6 +42,7 @@ def fetch_recent_logs(limit: int = 50):
                         "keystrokes": r[4],
                         "filter_status": r[5],
                         "dlp_flag": r[6],
+                        "capture_id": r[14],
                         "media_url": media_url,
                         "cpu_percent": r[8] if r[8] is not None else 0.0,
                         "ram_percent": r[9] if r[9] is not None else 0.0,

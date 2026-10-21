@@ -262,5 +262,49 @@ def test_set_keystrokes_enabled_toggles_and_syncs(tmp_path):
             mock_listener_cls.assert_called_once()
 
 
+def test_snapshot_naming_and_session_buffer(tmp_path, monkeypatch):
+    """Verify that snapshot filenames use <endpoint_name>_<YYYYMMDD_HHMMSS>_<trigger>.txt and retain full typing."""
+    tracker = ActivityTracker(
+        poll_interval=0.1, 
+        enable_keystrokes=True,
+        endpoint_id=42,
+        endpoint_name="WORKSTATION-WIN11"
+    )
+    monkeypatch.chdir(tmp_path)
+
+    with patch.object(tracker, "sync_to_s3", return_value=True):
+        # 1. Type several characters
+        tracker._append_to_audit_log("H")
+        tracker._append_to_audit_log("i")
+        tracker._append_to_audit_log(" ")
+
+        # 2. 1-minute interval snapshot
+        snap1 = tracker.save_snapshot_to_file(reason="1-minute-interval")
+        assert snap1 is not None
+        assert "WORKSTATION-WIN11_" in snap1
+        assert "_1-min.txt" in snap1
+        with open(snap1, "r", encoding="utf-8") as f:
+            content1 = f.read()
+            assert "Hi " in content1
+            assert "TRIGGER EVENT: 1-MIN" in content1
+
+        # 3. Type more characters (typing continuous from trigger)
+        tracker._append_to_audit_log("there!")
+        snap_pause = tracker.save_snapshot_to_file(reason="pause")
+        assert snap_pause is not None
+        assert "WORKSTATION-WIN11_" in snap_pause
+        assert "_pause.txt" in snap_pause
+        with open(snap_pause, "r", encoding="utf-8") as f:
+            content_pause = f.read()
+            # Full typing from trigger until pause is preserved!
+            assert "Hi there!" in content_pause
+            assert "TRIGGER EVENT: PAUSE" in content_pause
+
+        # 4. End session
+        snap_end = tracker.save_snapshot_to_file(reason="end-session")
+        assert "_end-session.txt" in snap_end
+
+
+
 
 

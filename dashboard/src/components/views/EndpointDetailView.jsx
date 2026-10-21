@@ -3,9 +3,16 @@ import {
   Monitor, ChevronRight, Cpu, LayoutDashboard, HardDrive, Wifi, 
   ArrowDown, ArrowUp, Key, Camera, Video, Clock, CheckCircle2, 
   ShieldCheck, AlertTriangle, ExternalLink, Globe, FileText, ArrowLeft,
-  UserX, Download, Eye, RefreshCw, X
+  UserX, Download, Eye, RefreshCw, X, Trash2, CheckSquare, Square
 } from 'lucide-react';
-import { fetchEndpointKeylogsApi, fetchKeylogContentApi } from '../../services/api';
+import { 
+  fetchEndpointKeylogsApi, 
+  fetchKeylogContentApi,
+  deleteEndpointKeylogApi,
+  batchDeleteEndpointKeylogsApi,
+  deleteScreenshotApi,
+  batchDeleteScreenshotsApi
+} from '../../services/api';
 import { 
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar 
 } from 'recharts';
@@ -16,7 +23,8 @@ export default function EndpointDetailView({
   onBack, 
   logs = [], 
   onViewScreenshot, 
-  onKickEndpoint
+  onKickEndpoint,
+  onDeleteScreenshot
 }) {
   const [activeSubTab, setActiveSubTab] = useState('activity'); // 'activity', 'applications', 'timeline', 'keylogs', 'screenshots', 'system'
 
@@ -34,12 +42,22 @@ export default function EndpointDetailView({
   const [previewFilename, setPreviewFilename] = useState(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
+  // Keylogs selection & deletion state
+  const [selectedKeylogs, setSelectedKeylogs] = useState([]);
+  const [isDeletingKeylogs, setIsDeletingKeylogs] = useState(false);
+
+  // Screenshots selection & deletion state
+  const [selectedScreenshots, setSelectedScreenshots] = useState([]);
+  const [deletedScreenshotIds, setDeletedScreenshotIds] = useState(new Set());
+  const [isDeletingScreenshots, setIsDeletingScreenshots] = useState(false);
+
   const loadKeylogs = async () => {
     if (!endpoint?.endpoint_id) return;
     setIsLoadingKeylogs(true);
     try {
       const files = await fetchEndpointKeylogsApi(endpoint.endpoint_id);
       setKeylogFiles(files);
+      setSelectedKeylogs([]);
     } catch (e) {
       console.warn('Failed to load keylogs:', e);
     } finally {
@@ -76,6 +94,48 @@ export default function EndpointDetailView({
     document.body.removeChild(link);
   };
 
+  const isAllKeylogsSelected = keylogFiles.length > 0 && selectedKeylogs.length === keylogFiles.length;
+
+  const handleToggleSelectAllKeylogs = () => {
+    if (isAllKeylogsSelected) {
+      setSelectedKeylogs([]);
+    } else {
+      setSelectedKeylogs(keylogFiles.map(kf => kf.filename));
+    }
+  };
+
+  const handleToggleSelectKeylog = (filename) => {
+    setSelectedKeylogs(prev => 
+      prev.includes(filename) ? prev.filter(f => f !== filename) : [...prev, filename]
+    );
+  };
+
+  const handleDeleteSingleKeylog = async (filename) => {
+    if (!window.confirm(`Are you sure you want to delete "${filename}"?`)) return;
+    try {
+      await deleteEndpointKeylogApi(endpoint.endpoint_id, filename);
+      setSelectedKeylogs(prev => prev.filter(f => f !== filename));
+      loadKeylogs();
+    } catch (e) {
+      alert(`Failed to delete keylog: ${e.message}`);
+    }
+  };
+
+  const handleBatchDeleteKeylogs = async () => {
+    if (selectedKeylogs.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedKeylogs.length} selected keylog files?`)) return;
+    setIsDeletingKeylogs(true);
+    try {
+      await batchDeleteEndpointKeylogsApi(endpoint.endpoint_id, selectedKeylogs);
+      setSelectedKeylogs([]);
+      loadKeylogs();
+    } catch (e) {
+      alert(`Failed to delete keylogs: ${e.message}`);
+    } finally {
+      setIsDeletingKeylogs(false);
+    }
+  };
+
   const handleToggleKeystrokes = (val) => {
     setCaptureKeysToFile(val);
     try { localStorage.setItem('edmt_capture_keys_to_file', String(val)); } catch (e) {}
@@ -86,6 +146,57 @@ export default function EndpointDetailView({
   // Filter logs for this specific endpoint
   const endpointLogs = logs.filter(l => l.endpoint_id === endpoint.endpoint_id || String(l.endpoint_id) === String(endpoint.endpoint_id));
   const latestLog = endpointLogs[0] || {};
+
+  // Active Screen Captures with deleted IDs filtered
+  const screenCaptures = endpointLogs.filter(l => l.media_url && !deletedScreenshotIds.has(String(l.log_id)));
+  const isAllScreenshotsSelected = screenCaptures.length > 0 && selectedScreenshots.length === screenCaptures.length;
+
+  const handleToggleSelectAllScreenshots = () => {
+    if (isAllScreenshotsSelected) {
+      setSelectedScreenshots([]);
+    } else {
+      setSelectedScreenshots(screenCaptures.map(c => c.log_id));
+    }
+  };
+
+  const handleToggleSelectScreenshot = (logId, e) => {
+    e.stopPropagation();
+    setSelectedScreenshots(prev => 
+      prev.includes(logId) ? prev.filter(id => id !== logId) : [...prev, logId]
+    );
+  };
+
+  const handleDeleteSingleScreenshot = async (log, e) => {
+    e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete the screenshot for Log #${log.log_id}?`)) return;
+    try {
+      await deleteScreenshotApi(log.capture_id, log.log_id);
+      setDeletedScreenshotIds(prev => new Set([...prev, String(log.log_id)]));
+      setSelectedScreenshots(prev => prev.filter(id => id !== log.log_id));
+      if (onDeleteScreenshot) onDeleteScreenshot([log.log_id]);
+    } catch (e) {
+      alert(`Failed to delete screenshot: ${e.message}`);
+    }
+  };
+
+  const handleBatchDeleteScreenshots = async () => {
+    if (selectedScreenshots.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedScreenshots.length} selected screenshots?`)) return;
+    setIsDeletingScreenshots(true);
+    try {
+      const selectedLogs = screenCaptures.filter(c => selectedScreenshots.includes(c.log_id));
+      const captureIds = selectedLogs.map(c => c.capture_id).filter(Boolean);
+      const logIds = selectedLogs.map(c => c.log_id);
+      await batchDeleteScreenshotsApi({ capture_ids: captureIds, log_ids: logIds });
+      setDeletedScreenshotIds(prev => new Set([...prev, ...logIds.map(String)]));
+      setSelectedScreenshots([]);
+      if (onDeleteScreenshot) onDeleteScreenshot(logIds);
+    } catch (e) {
+      alert(`Failed to delete screenshots: ${e.message}`);
+    } finally {
+      setIsDeletingScreenshots(false);
+    }
+  };
 
   // Live or latest metrics
   const cpuVal = latestLog.cpu_percent !== undefined ? latestLog.cpu_percent : (endpoint.cpu || 0);
@@ -413,24 +524,46 @@ export default function EndpointDetailView({
 
           {/* SECTION: AUDIT TEXT FILES (.TXT ARCHIVES) */}
           <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                   <FileText className="w-4 h-4 text-emerald-600" />
                   <span>Audit Text Files (.txt Logs)</span>
                 </h4>
                 <p className="text-[11px] text-slate-500">
-                  Periodic minute snapshots, pause interlocks, and session disconnect records available for instant viewing and download.
+                  Periodic minute snapshots, pause interlocks, and session disconnect records available for instant viewing, download, and management.
                 </p>
               </div>
-              <button
-                onClick={loadKeylogs}
-                disabled={isLoadingKeylogs}
-                className="px-2.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingKeylogs ? 'animate-spin' : ''}`} />
-                <span>Refresh Logs</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {selectedKeylogs.length > 0 && (
+                  <button
+                    onClick={handleBatchDeleteKeylogs}
+                    disabled={isDeletingKeylogs}
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Selected ({selectedKeylogs.length})</span>
+                  </button>
+                )}
+                {keylogFiles.length > 0 && (
+                  <button
+                    onClick={handleToggleSelectAllKeylogs}
+                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
+                    title={isAllKeylogsSelected ? "Deselect all files" : "Select all files"}
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>{isAllKeylogsSelected ? 'Deselect All' : 'Select All'}</span>
+                  </button>
+                )}
+                <button
+                  onClick={loadKeylogs}
+                  disabled={isLoadingKeylogs}
+                  className="px-2.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingKeylogs ? 'animate-spin' : ''}`} />
+                  <span>Refresh Logs</span>
+                </button>
+              </div>
             </div>
 
             {isLoadingKeylogs ? (
@@ -445,10 +578,19 @@ export default function EndpointDetailView({
               </div>
             ) : (
               <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                <div className="overflow-x-auto max-h-64">
+                <div className="overflow-x-auto max-h-72">
                   <table className="w-full text-xs text-left">
-                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold sticky top-0">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold sticky top-0 z-10">
                       <tr>
+                        <th className="py-2.5 px-3 w-8 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isAllKeylogsSelected}
+                            onChange={handleToggleSelectAllKeylogs}
+                            className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer align-middle"
+                            title={isAllKeylogsSelected ? "Deselect All" : "Select All"}
+                          />
+                        </th>
                         <th className="py-2.5 px-3">Filename</th>
                         <th className="py-2.5 px-3">Trigger Event</th>
                         <th className="py-2.5 px-3">Modified</th>
@@ -457,48 +599,67 @@ export default function EndpointDetailView({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700 bg-white">
-                      {keylogFiles.map((kf) => (
-                        <tr key={kf.filename} className="hover:bg-slate-50/70 transition">
-                          <td className="py-2.5 px-3 font-mono font-bold text-slate-900 flex items-center gap-2">
-                            <FileText className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            <span className="truncate max-w-xs">{kf.filename}</span>
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              kf.event_type === 'Paused' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                              kf.event_type === 'Kicked' ? 'bg-red-50 text-red-700 border border-red-200' :
-                              kf.event_type === 'Session End' ? 'bg-slate-100 text-slate-700 border border-slate-300' :
-                              'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            }`}>
-                              {kf.event_type}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-500 text-[11px] font-mono">
-                            {kf.modified_at ? new Date(kf.modified_at).toLocaleString() : 'Recent'}
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px]">
-                            {kf.size_bytes ? `${(kf.size_bytes / 1024).toFixed(1)} KB` : '< 1 KB'}
-                          </td>
-                          <td className="py-2.5 px-3 text-right space-x-2">
-                            <button
-                              onClick={() => handleViewKeylog(kf.filename)}
-                              className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold transition inline-flex items-center gap-1 cursor-pointer"
-                              title="View log content"
-                            >
-                              <Eye className="w-3 h-3" />
-                              <span>View</span>
-                            </button>
-                            <button
-                              onClick={() => handleDownloadKeylog(kf.filename)}
-                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition inline-flex items-center gap-1 cursor-pointer"
-                              title="Download .txt file"
-                            >
-                              <Download className="w-3 h-3" />
-                              <span>Download</span>
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {keylogFiles.map((kf) => {
+                        const isSelected = selectedKeylogs.includes(kf.filename);
+                        return (
+                          <tr key={kf.filename} className={`transition ${isSelected ? 'bg-emerald-50/50' : 'hover:bg-slate-50/70'}`}>
+                            <td className="py-2.5 px-3 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleSelectKeylog(kf.filename)}
+                                className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer align-middle"
+                              />
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-bold text-slate-900 flex items-center gap-2">
+                              <FileText className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span className="truncate max-w-xs">{kf.filename}</span>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                kf.event_type === 'Paused' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                kf.event_type === 'Kicked' ? 'bg-red-50 text-red-700 border border-red-200' :
+                                kf.event_type === 'Session End' ? 'bg-slate-100 text-slate-700 border border-slate-300' :
+                                'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              }`}>
+                                {kf.event_type}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-500 text-[11px] font-mono">
+                              {kf.modified_at ? new Date(kf.modified_at).toLocaleString() : 'Recent'}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px]">
+                              {kf.size_bytes ? `${(kf.size_bytes / 1024).toFixed(1)} KB` : '< 1 KB'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right space-x-1.5">
+                              <button
+                                onClick={() => handleViewKeylog(kf.filename)}
+                                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold transition inline-flex items-center gap-1 cursor-pointer"
+                                title="View log content"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>View</span>
+                              </button>
+                              <button
+                                onClick={() => handleDownloadKeylog(kf.filename)}
+                                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition inline-flex items-center gap-1 cursor-pointer"
+                                title="Download .txt file"
+                              >
+                                <Download className="w-3 h-3" />
+                                <span>Download</span>
+                              </button>
+                              <button
+                                onClick={() => handleDeleteSingleKeylog(kf.filename)}
+                                className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-bold transition inline-flex items-center gap-1 cursor-pointer"
+                                title="Delete keylog file"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Delete</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -550,37 +711,98 @@ export default function EndpointDetailView({
       {/* SUB-TAB CONTENT 5: SCREENSHOTS & RECORDINGS */}
       {activeSubTab === 'screenshots' && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <h4 className="font-bold text-sm text-slate-900">Encrypted Screen Capture Gallery</h4>
-            <span className="text-xs text-slate-500">Stored in AWS S3 with AES-256 Server-Side Encryption</span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                <Camera className="w-4 h-4 text-emerald-600" />
+                <span>Encrypted Screen Capture Gallery</span>
+                {screenCaptures.length > 0 && (
+                  <span className="text-[11px] font-normal text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                    {screenCaptures.length} captures
+                  </span>
+                )}
+              </h4>
+              <span className="text-xs text-slate-500">Stored in AWS S3 with AES-256 Server-Side Encryption</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {selectedScreenshots.length > 0 && (
+                <button
+                  onClick={handleBatchDeleteScreenshots}
+                  disabled={isDeletingScreenshots}
+                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Selected ({selectedScreenshots.length})</span>
+                </button>
+              )}
+              {screenCaptures.length > 0 && (
+                <button
+                  onClick={handleToggleSelectAllScreenshots}
+                  className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
+                  title={isAllScreenshotsSelected ? "Deselect all captures" : "Select all captures"}
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  <span>{isAllScreenshotsSelected ? 'Deselect All' : 'Select All'}</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-2">
-            {endpointLogs.filter(l => l.media_url).length === 0 ? (
+            {screenCaptures.length === 0 ? (
               <div className="col-span-3 text-center py-10 text-slate-400 text-xs">
                 No active screen captures for this device in the current retention cycle.
               </div>
             ) : (
-              endpointLogs.filter(l => l.media_url).map((log) => (
-                <div
-                  key={log.log_id}
-                  onClick={() => onViewScreenshot(log)}
-                  className="group relative rounded-xl border border-slate-200 overflow-hidden shadow-sm hover:border-emerald-500 transition cursor-pointer"
-                >
-                  <img
-                    src={log.media_url}
-                    alt={`Capture ${log.log_id}`}
-                    className="w-full h-40 object-cover group-hover:scale-105 transition duration-300"
-                  />
-                  <div className="p-3 bg-white">
-                    <div className="flex items-center justify-between text-xs font-semibold text-slate-900">
-                      <span>Log #{log.log_id}</span>
-                      <span className="text-[11px] text-slate-500">{new Date(log.timestamp).toLocaleTimeString()}</span>
+              screenCaptures.map((log) => {
+                const isSelected = selectedScreenshots.includes(log.log_id);
+                return (
+                  <div
+                    key={log.log_id}
+                    onClick={() => onViewScreenshot(log)}
+                    className={`group relative rounded-xl border overflow-hidden shadow-sm transition cursor-pointer ${
+                      isSelected ? 'border-emerald-500 ring-2 ring-emerald-500' : 'border-slate-200 hover:border-emerald-400'
+                    }`}
+                  >
+                    {/* Top overlay action bar */}
+                    <div className="absolute top-2 left-2 right-2 z-10 flex items-center justify-between">
+                      <div 
+                        onClick={(e) => handleToggleSelectScreenshot(log.log_id, e)}
+                        className="bg-black/60 hover:bg-black/80 text-white p-1.5 rounded-lg flex items-center justify-center transition cursor-pointer backdrop-blur-sm"
+                        title={isSelected ? "Deselect capture" : "Select capture"}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => handleToggleSelectScreenshot(log.log_id, e)}
+                          className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer"
+                        />
+                      </div>
+                      <button
+                        onClick={(e) => handleDeleteSingleScreenshot(log, e)}
+                        className="bg-black/60 hover:bg-red-600 text-white p-1.5 rounded-lg transition backdrop-blur-sm cursor-pointer shadow-sm"
+                        title="Delete screenshot"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5 truncate">{log.active_app}</p>
+
+                    <img
+                      src={log.media_url}
+                      alt={`Capture ${log.log_id}`}
+                      className="w-full h-40 object-cover group-hover:scale-105 transition duration-300"
+                    />
+                    <div className="p-3 bg-white">
+                      <div className="flex items-center justify-between text-xs font-semibold text-slate-900">
+                        <span>Log #{log.log_id}</span>
+                        <span className="text-[11px] text-slate-500">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 truncate">{log.active_app}</p>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

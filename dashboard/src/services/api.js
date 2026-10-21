@@ -204,6 +204,51 @@ export const fetchKeylogContentApi = async (endpointId, filename) => {
   }
 };
 
+export const deleteEndpointKeylogApi = async (endpointId, filename) => {
+  try {
+    const res = await api.delete(`/endpoints/${endpointId}/keylogs/${encodeURIComponent(filename)}`);
+    return res.data;
+  } catch (e) {
+    console.error(`Failed to delete keylog ${filename}:`, e);
+    throw e;
+  }
+};
+
+export const batchDeleteEndpointKeylogsApi = async (endpointId, filenames) => {
+  try {
+    const res = await api.post(`/endpoints/${endpointId}/keylogs/batch-delete`, { filenames });
+    return res.data;
+  } catch (e) {
+    console.error(`Failed to batch delete keylogs:`, e);
+    throw e;
+  }
+};
+
+export const deleteScreenshotApi = async (captureId, logId) => {
+  try {
+    if (captureId) {
+      const res = await api.delete(`/media/${captureId}`);
+      return res.data;
+    } else if (logId) {
+      const res = await api.delete(`/media/by-log/${logId}`);
+      return res.data;
+    }
+  } catch (e) {
+    console.error(`Failed to delete screenshot (capture: ${captureId}, log: ${logId}):`, e);
+    throw e;
+  }
+};
+
+export const batchDeleteScreenshotsApi = async ({ capture_ids = [], log_ids = [] }) => {
+  try {
+    const res = await api.post('/media/batch-delete', { capture_ids, log_ids });
+    return res.data;
+  } catch (e) {
+    console.error(`Failed to batch delete screenshots:`, e);
+    throw e;
+  }
+};
+
 
 export const fetchEndpoints = async () => {
   const kicked = getKickedEndpointIds();
