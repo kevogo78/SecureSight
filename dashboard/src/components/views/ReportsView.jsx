@@ -320,7 +320,7 @@ export default function ReportsView({ logs = [], endpoints = [] }) {
                               )}
                             </div>
                             <div className="text-[10px] text-slate-400 font-mono">
-                              ID: {ep.endpoint_id} {ep.hostname && ep.hostname !== recentName && `• ${ep.hostname}`}
+                              ID: {ep.endpoint_id} {ep.hostname && ep.hostname !== recentName && `| ${ep.hostname}`}
                             </div>
                           </div>
                         </div>
@@ -432,7 +432,7 @@ export default function ReportsView({ logs = [], endpoints = [] }) {
                             )}
                           </div>
                           <div className="text-[10px] text-slate-400 font-mono">
-                            ID: {log.endpoint_id} {epInfo.hostname !== epInfo.name && `• ${epInfo.hostname}`}
+                            ID: {log.endpoint_id} {epInfo.hostname !== epInfo.name && `| ${epInfo.hostname}`}
                           </div>
                         </div>
                       </td>
@@ -455,7 +455,7 @@ export default function ReportsView({ logs = [], endpoints = [] }) {
                         ) : (log.app_category || '').toLowerCase().includes('brows') ? (
                           <span className="text-slate-500 italic text-[11px]">Web Session</span>
                         ) : (
-                          <span className="text-slate-400 italic text-[11px]">—</span>
+                          <span className="text-slate-400 italic text-[11px]">-</span>
                         )}
                       </td>
                       <td className="py-3 px-4">

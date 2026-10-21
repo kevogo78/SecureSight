@@ -204,7 +204,7 @@ export default function EndpointsView({
           <div>
             <div className="text-xs font-semibold text-slate-500">Connected Endpoints</div>
             <div className="text-3xl font-black text-[#15803d] mt-2">{totalConnected}</div>
-            <div className="text-[11px] text-emerald-600 font-medium mt-1">Live streaming →</div>
+            <div className="text-[11px] text-emerald-600 font-medium mt-1">Live streaming &rarr;</div>
           </div>
           <div className="p-3 bg-emerald-50 rounded-xl text-emerald-700">
             <Monitor className="w-7 h-7" />
@@ -248,7 +248,7 @@ export default function EndpointsView({
           <div>
             <div className="text-xs font-semibold text-slate-500">Offline / Suspended</div>
             <div className="text-3xl font-black text-slate-900 mt-2">{offlineCount}</div>
-            <div className="text-[11px] text-slate-500 mt-1">Connection history →</div>
+            <div className="text-[11px] text-slate-500 mt-1">Connection history &rarr;</div>
           </div>
           <div className="p-3 bg-slate-100 rounded-xl text-slate-700">
             <Power className="w-7 h-7" />
@@ -431,9 +431,9 @@ export default function EndpointsView({
                         {/* Operating System */}
                         <td className="py-3.5 px-4">
                           <span className="inline-flex items-center gap-1.5 font-medium">
-                            <span className={`text-[10px] ${
-                              ep.osType === 'mac' ? 'text-slate-700' : 'text-blue-600'
-                            }`}>■</span>
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${
+                              ep.osType === 'mac' ? 'bg-slate-700' : 'bg-blue-600'
+                            }`} />
                             {ep.os}
                           </span>
                         </td>
@@ -463,7 +463,7 @@ export default function EndpointsView({
                           {isOffline ? (
                             <span className="inline-flex items-center gap-1.5 font-medium">
                               <span className="w-2 h-2 rounded-full bg-slate-400" />
-                              <span className="text-slate-600 font-bold">Offline / Standby</span>
+                              <span className="text-slate-600 font-bold">Offline</span>
                             </span>
                           ) : paused ? (
                             <span className="inline-flex items-center gap-1.5 font-medium">
@@ -573,7 +573,7 @@ export default function EndpointsView({
             {/* Pagination Footer */}
             <div className="p-4 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
               <div>
-                Showing {(currentPage - 1) * itemsPerPage + 1}–{Math.min(currentPage * itemsPerPage, displayedEndpoints.length)} of {displayedEndpoints.length} workstations
+                Showing {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, displayedEndpoints.length)} of {displayedEndpoints.length} workstations
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -581,7 +581,7 @@ export default function EndpointsView({
                   disabled={currentPage === 1}
                   className="px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
                 >
-                  ‹
+                  &lsaquo;
                 </button>
                 {Array.from({ length: totalPages }).map((_, idx) => (
                   <button
@@ -599,7 +599,7 @@ export default function EndpointsView({
                   disabled={currentPage === totalPages}
                   className="px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
                 >
-                  ›
+                  &rsaquo;
                 </button>
               </div>
             </div>
@@ -782,7 +782,7 @@ export default function EndpointsView({
                                     ? 'bg-emerald-50 text-emerald-700' 
                                     : 'bg-slate-100 text-slate-600'
                                 }`}>
-                                  {item.status || 'Active'}
+                                  {(item.status || '').toLowerCase().includes('online') ? 'Online' : 'Offline'}
                                 </span>
                               </td>
                               <td className="py-2 px-3">

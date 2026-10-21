@@ -199,13 +199,13 @@ export default function ActivityView({
                               </div>
                             </div>
                             <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0 ml-2 ${
-                              ep.status === 'Online' 
+                              (ep.status || '').toLowerCase().includes('online') 
                                 ? 'bg-emerald-100/70 text-emerald-700' 
-                                : ep.status === 'Paused' 
+                                : (ep.status || '').toLowerCase().includes('paused') 
                                   ? 'bg-amber-100/70 text-amber-700' 
                                   : 'bg-slate-100 text-slate-600'
                             }`}>
-                              {ep.status || 'Enrolled'}
+                              {(ep.status || '').toLowerCase().includes('online') ? 'Online' : (ep.status || '').toLowerCase().includes('paused') ? 'Paused' : 'Offline'}
                             </span>
                           </div>
                         );
@@ -350,7 +350,7 @@ export default function ActivityView({
                               <span className="italic">Web Session</span>
                             </div>
                           ) : (
-                            <span className="text-slate-400 italic text-[11px]">—</span>
+                            <span className="text-slate-400 italic text-[11px]">-</span>
                           )}
                         </td>
                         <td className="py-3 px-4 font-mono">

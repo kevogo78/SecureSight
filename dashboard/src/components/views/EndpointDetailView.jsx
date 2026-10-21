@@ -256,7 +256,7 @@ export default function EndpointDetailView({
               <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded-full ${
                 (endpoint.status === 'Paused' || endpoint.consent_paused)
                   ? 'text-amber-800 bg-amber-50 border border-amber-300'
-                  : endpoint.status === 'Online'
+                  : (endpoint.status || '').toLowerCase().includes('online')
                     ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
                     : 'text-slate-600 bg-slate-100'
               }`}>
@@ -267,8 +267,8 @@ export default function EndpointDetailView({
                   </>
                 ) : (
                   <>
-                    <span className={`w-1.5 h-1.5 rounded-full ${endpoint.status === 'Online' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
-                    <span>{endpoint.status || 'Offline'}</span>
+                    <span className={`w-1.5 h-1.5 rounded-full ${(endpoint.status || '').toLowerCase().includes('online') ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+                    <span>{(endpoint.status || '').toLowerCase().includes('online') ? 'Online' : 'Offline'}</span>
                   </>
                 )}
               </span>
@@ -315,7 +315,7 @@ export default function EndpointDetailView({
           { id: 'applications', label: 'Applications' },
           { id: 'timeline', label: 'Activity Index & DLP Timeline' },
           { id: 'keylogs', label: 'Keylogs' },
-          { id: 'screenshots', label: 'Screenshots & Recordings' },
+          { id: 'screenshots', label: 'Screenshots' },
           { id: 'system', label: 'System Usage' },
         ].map((tab) => (
           <button
@@ -718,7 +718,7 @@ export default function EndpointDetailView({
         </div>
       )}
 
-      {/* SUB-TAB CONTENT 5: SCREENSHOTS & RECORDINGS */}
+      {/* SUB-TAB CONTENT 5: SCREENSHOTS */}
       {activeSubTab === 'screenshots' && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
