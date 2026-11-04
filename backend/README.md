@@ -81,7 +81,13 @@ backend/
 
 ## ⚙️ Environment Configuration (`.env`)
 
-Create a `.env` file in the `backend/` directory:
+Create a `.env` file in the `backend/` directory from `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+Populate the required configuration parameters:
 
 ```ini
 # PostgreSQL Database Settings

@@ -35,7 +35,7 @@ export default function LoginPage({ onLogin }) {
           <img src="/branding/securesight-logo.png" alt="SecureSight — Visibility. Security. Control." className="w-full max-w-sm h-auto mb-3" />
           <h1 className="sr-only">SecureSight Administrator Portal</h1>
           <p className="text-xs font-semibold text-emerald-400/90 mt-1 uppercase tracking-wider">
-            ITEC 4810 Capstone • Administrator Portal
+            SecureSight • Administrator Portal
           </p>
           <p className="text-xs text-slate-400 mt-2">
             Sign in with authorized administrator credentials to manage fleet endpoints and review privacy telemetry.

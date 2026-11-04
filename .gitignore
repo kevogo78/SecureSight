@@ -149,7 +149,11 @@ activemq-data/
 
 # Environments
 .env
-.envrc
+.env.*
+!.env.example
+.env
+.env.*
+!.env.examplerc
 .venv
 env/
 venv/
@@ -230,10 +234,12 @@ env/
 node_modules/
 
 # Secrets & Environment Variables
-.venv311/
+.venv*/
 keystroke_audit.txt
 keystrokes_audit.txt
 .env
+.env.*
+!.env.example
 *.pem
 *.key
 config/config.json

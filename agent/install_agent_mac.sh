@@ -1,15 +1,15 @@
 #!/bin/bash
 # =====================================================================
-#   Endpoint Device Monitor (EDMT) - macOS Terminal Setup & Launcher
-#   Georgia Gwinnett College - ITEC 4810 Capstone
+#   SecureSight Client Agent - macOS Terminal Setup & Launcher
+#   SecureSight Endpoint Observability Platform
 #   Usage: bash install_agent_mac.sh
 # =====================================================================
 
 cd "$(dirname "$0")"
 
 echo "====================================================================="
-echo "  Endpoint Device Monitor (EDMT) - macOS Launcher"
-echo "  Georgia Gwinnett College - ITEC 4810 Capstone"
+echo "  SecureSight Client Agent - macOS Launcher"
+echo "  SecureSight Endpoint Observability Platform"
 echo "====================================================================="
 
 PYTHON_BIN=""
@@ -22,7 +22,7 @@ else
     exit 1
 fi
 
-VENV_DIR=".venv_edmt"
+VENV_DIR=".venv_securesight"
 if [ ! -d "$VENV_DIR" ]; then
     echo "[*] Creating virtual environment in $VENV_DIR..."
     $PYTHON_BIN -m venv "$VENV_DIR"

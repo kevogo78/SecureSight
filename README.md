@@ -82,18 +82,24 @@ flowchart TD
 ## 📁 Repository Directory Structure
 
 ```
-ITEC4810_Capstone/
+SecureSight/
 ├── agent/                 # SecureSight Python PyQt6 desktop agent
+│   ├── .env.example       # Agent environment configuration template
 │   ├── assets/            # SecureSight branding artwork & icons
 │   ├── config/            # Privacy rules definitions, blacklist, & endpoint configuration
 │   ├── src/               # Core trackers, crypto engine, DLP filter, UI modals, tray manager
-│   └── tests/             # Unit and integration tests for agent modules (36 passing tests)
+│   ├── install_agent_windows.bat # 1-click Windows installer & launcher
+│   ├── install_agent_mac.command # 1-click macOS Finder launcher
+│   ├── install_agent_mac.sh      # macOS terminal launcher
+│   └── tests/             # Unit and integration tests for agent modules
 ├── backend/               # FastAPI backend ingestion and fleet management API
+│   ├── .env.example       # Backend environment configuration template
 │   ├── src/
 │   │   ├── routes/        # Telemetry, endpoints, keylogs, audit, media, auth, and privacy
 │   │   ├── database.py    # ThreadedConnectionPool & transaction rollback protection
 │   │   └── utils/         # S3 presigned URL generation and Boto3 client helpers
-│   └── tests/             # Pytest endpoint, media authorization, and lifecycle tests (34 tests)
+│   ├── nginx/             # NGINX reverse proxy template
+│   └── tests/             # Pytest endpoint, media authorization, and lifecycle tests
 ├── dashboard/             # SecureSight React single-page administrative dashboard
 │   ├── public/branding/   # SecureSight logos & UI brand assets
 │   ├── src/
@@ -117,9 +123,252 @@ ITEC4810_Capstone/
 
 ---
 
-## 🚀 Quick Start Guide
+## 🚀 AWS Free Tier Deployment Guide
 
-### 1. Local Development Setup
+Follow these step-by-step instructions to deploy SecureSight on your personal AWS account within the AWS Free Tier.
+
+### Step 1: Provision AWS Cloud Resources
+
+1. **Amazon EC2**:
+   - Instance Type: `t2.micro` or `t3.micro` (Free Tier eligible).
+   - OS: Ubuntu 24.04 LTS (or Ubuntu 22.04 LTS).
+   - Security Group Rules:
+     - `SSH (22)`: Inbound from your administrative IP.
+     - `HTTP (80)`: Inbound from `0.0.0.0/0` (public dashboard access).
+     - `HTTPS (443)`: Inbound from `0.0.0.0/0` (optional SSL via Certbot).
+     - `Custom TCP (8000)`: Inbound only from `127.0.0.1` (FastAPI local reverse proxy).
+
+2. **Amazon RDS (PostgreSQL)**:
+   - Engine: PostgreSQL 15 or 16.
+   - Template: Free Tier (`db.t3.micro` or `db.t4g.micro`, 20 GB gp3 storage).
+   - Master Username: `postgresadmin` (or your choice).
+   - Master Password: `<YOUR_SECURE_RDS_PASSWORD>`.
+   - Security Group: Allow inbound port `5432` from the Security Group ID of your EC2 instance.
+
+3. **Amazon S3**:
+   - Create a private bucket (e.g., `securesight-media-<YOUR_ACCOUNT_ID>-<REGION>`).
+   - Keep "Block all public access" ENABLED.
+   - Attach an IAM role to the EC2 instance with `s3:PutObject`, `s3:GetObject`, and `s3:ListBucket` permissions on `arn:aws:s3:::<YOUR_S3_BUCKET_NAME>/*`.
+
+---
+
+### Step 2: Initialize the Amazon RDS Database
+
+Connect to your EC2 instance via SSH:
+```bash
+ssh -i "<YOUR_KEY_PAIR>.pem" ubuntu@<YOUR_EC2_PUBLIC_IP>
+```
+
+Clone the repository and initialize the database schema and default seeds:
+```bash
+git clone https://github.com/<YOUR_GITHUB_USER>/SecureSight.git
+cd SecureSight
+
+# Install PostgreSQL client tools
+sudo apt update && sudo apt install -y postgresql-client
+
+# Run the automated database initializer:
+DB_HOST=<YOUR_RDS_ENDPOINT>.us-east-1.rds.amazonaws.com \
+DB_PASS=<YOUR_SECURE_RDS_PASSWORD> \
+DB_USER=postgresadmin \
+DB_NAME=postgres \
+./scripts/init-rds.sh
+```
+
+---
+
+### Step 3: Configure and Launch the Backend Service
+
+1. **Create Virtual Environment & Install Dependencies**:
+   ```bash
+   cd /home/ubuntu/SecureSight/backend
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   deactivate
+   ```
+
+2. **Configure Environment Variables**:
+   ```bash
+   cp .env.example .env
+   nano .env
+   ```
+   Fill in your configuration details:
+   ```ini
+   DB_HOST=<YOUR_RDS_ENDPOINT>.us-east-1.rds.amazonaws.com
+   DB_NAME=postgres
+   DB_USER=postgresadmin
+   DB_PASS=<YOUR_SECURE_RDS_PASSWORD>
+   DB_PORT=5432
+   DB_SSLMODE=prefer
+
+   S3_BUCKET=<YOUR_S3_BUCKET_NAME>
+   AWS_REGION=us-east-1
+
+   DASHBOARD_ADMIN_USER=administrator
+   DASHBOARD_ADMIN_PASSWORD=<YOUR_ADMIN_PASSWORD>
+   DASHBOARD_SESSION_SECRET=<RANDOM_32_CHAR_STRING>
+   DASHBOARD_COOKIE_SECURE=false
+   SCREENSHOT_KEY_HEX=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+   SECRET_KEY=<RANDOM_32_CHAR_STRING>
+   ```
+
+3. **Install Systemd Service (`endpoint-api.service`)**:
+   ```bash
+   sudo nano /etc/systemd/system/endpoint-api.service
+   ```
+   Paste the following:
+   ```ini
+   [Unit]
+   Description=SecureSight FastAPI Endpoint Monitoring Daemon
+   After=network.target
+
+   [Service]
+   User=ubuntu
+   Group=ubuntu
+   WorkingDirectory=/home/ubuntu/SecureSight/backend
+   EnvironmentFile=/home/ubuntu/SecureSight/backend/.env
+   ExecStart=/home/ubuntu/SecureSight/backend/venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 2
+   Restart=always
+   RestartSec=5
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+   Enable and start the service:
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable endpoint-api
+   sudo systemctl start endpoint-api
+   sudo systemctl status endpoint-api --no-pager
+   ```
+
+---
+
+### Step 4: Build Dashboard and Configure NGINX
+
+1. **Install Node.js & Build Frontend**:
+   ```bash
+   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+   sudo apt install -y nodejs nginx
+
+   cd /home/ubuntu/SecureSight/dashboard
+   npm install
+   npm run build
+
+   sudo mkdir -p /usr/share/nginx/html
+   sudo rm -rf /usr/share/nginx/html/*
+   sudo cp -r dist/* /usr/share/nginx/html/
+   ```
+
+2. **Configure NGINX Reverse Proxy**:
+   ```bash
+   sudo nano /etc/nginx/sites-available/securesight
+   ```
+   Paste the following configuration:
+   ```nginx
+   server {
+       listen 80 default_server;
+       listen [::]:80 default_server;
+       server_name _;
+
+       root /usr/share/nginx/html;
+       index index.html index.htm;
+       charset utf-8;
+
+       location /api/ {
+           proxy_pass http://127.0.0.1:8000/api/;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection 'upgrade';
+           proxy_set_header Host $host;
+           proxy_cache_bypass $http_upgrade;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+
+       location /health {
+           proxy_pass http://127.0.0.1:8000/health;
+           proxy_http_version 1.1;
+           proxy_set_header Host $host;
+       }
+
+       location /docs {
+           proxy_pass http://127.0.0.1:8000/docs;
+           proxy_http_version 1.1;
+           proxy_set_header Host $host;
+       }
+
+       location /openapi.json {
+           proxy_pass http://127.0.0.1:8000/openapi.json;
+           proxy_http_version 1.1;
+           proxy_set_header Host $host;
+       }
+
+       location / {
+           try_files $uri $uri/ /index.html;
+       }
+   }
+   ```
+   Enable the site and reload NGINX:
+   ```bash
+   sudo ln -sf /etc/nginx/sites-available/securesight /etc/nginx/sites-enabled/
+   sudo rm -f /etc/nginx/sites-enabled/default
+   sudo nginx -t
+   sudo systemctl restart nginx
+   ```
+
+   *Now open `http://<YOUR_EC2_PUBLIC_IP>` in your browser to view the SecureSight Admin Dashboard!*
+
+---
+
+### Step 5: Install & Connect the Client Agent
+
+On any monitored client workstation (Windows, macOS, or Linux):
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/<YOUR_GITHUB_USER>/SecureSight.git
+   cd SecureSight/agent
+   ```
+
+2. **Configure Connection**:
+   Edit `agent/config/config.json`:
+   ```json
+   {
+     "endpoint_id": 1,
+     "server_url": "http://<YOUR_EC2_PUBLIC_IP>/api/v1/telemetry",
+     "polling_interval_seconds": 10,
+     "screenshot_frequency_ticks": 6,
+     "crypto_key_hex": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+     "interval_ms": 10000,
+     "enable_keystrokes": true,
+     "capture_keys_to_file": true,
+     "s3_bucket_name": "<YOUR_S3_BUCKET_NAME>"
+   }
+   ```
+
+3. **Launch the Agent**:
+   - **Windows**: Double-click `install_agent_windows.bat`
+   - **macOS**: Double-click `install_agent_mac.command` (or run `bash install_agent_mac.sh`)
+   - **Linux**:
+     ```bash
+     python3 -m venv venv
+     source venv/bin/activate
+     pip install -r requirements.txt
+     python run_agent.py
+     ```
+
+4. **Consent & Streaming**:
+   When the Consent Dialog appears, verify your server URL (`http://<YOUR_EC2_PUBLIC_IP>/api/v1/telemetry`), check the authorization box, and click **"Start Monitoring"**. The endpoint immediately appears live in your Admin Dashboard!
+
+---
+
+## 💻 Local Development Setup
+
+To run all components locally on your workstation for testing:
 
 #### Backend (FastAPI)
 ```bash
@@ -129,7 +378,7 @@ source venv/bin/activate       # On Windows: .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn src.main:app --reload --port 8000
 ```
-*API docs available at: `http://127.0.0.1:8000/docs`*
+*Interactive Swagger documentation: `http://127.0.0.1:8000/docs`*
 
 #### Dashboard (React + Vite)
 ```bash
@@ -137,44 +386,32 @@ cd dashboard
 npm install
 npm run dev
 ```
-*Dashboard available at: `http://localhost:5173/`*
+*Local dashboard: `http://localhost:5173/`*
 
-#### SecureSight Client Agent (Python PyQt6)
+#### Client Agent (Python PyQt6)
 ```bash
 cd agent
 python -m venv venv
 source venv/bin/activate       # On Windows: .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python -m src.main
-```
-
----
-
-### 2. AWS Cloud Deployment
-
-For detailed production instructions on deploying to **AWS EC2**, **Amazon RDS**, and **Amazon S3**, refer to the [**AWS Deployment Guide**](docs/aws-deployment-guide.md).
-
-Quick update on the live Ubuntu EC2 instance:
-```bash
-cd /home/ubuntu/ITEC4810_Capstone
-./scripts/deploy-ec2.sh
+python run_agent.py
 ```
 
 ---
 
 ## 🧪 Testing & Quality Assurance
 
-Run client agent tests with pytest:
+Run client agent tests:
 ```bash
-pytest agent/tests
+pytest agent/tests -v
 ```
 
-Run backend API tests with pytest:
+Run backend API tests:
 ```bash
-pytest backend/tests
+pytest backend/tests -v
 ```
 
-Build the frontend dashboard for production:
+Test production frontend build:
 ```bash
 cd dashboard
 npm run build
@@ -185,12 +422,12 @@ npm run build
 ## 📚 Documentation Links
 
 - [Documentation Index](docs/index.md)
-- [Client Agent Installation Guide](docs/agent-installation.md)
-- [AWS Cloud Deployment Guide](docs/aws-deployment-guide.md)
+- [Client Agent Installation & Setup Guide](docs/agent-installation.md)
+- [AWS Cloud Deployment & Infrastructure Guide](docs/aws-deployment-guide.md)
 - [Threat Model & Privacy Safeguards](docs/threat-model.md)
-- [Testing & Verification Demos](docs/demos.md)
+- [Verification Demos & Testing Scenarios](docs/demos.md)
 
 ---
 
 ## 📄 License
-This project is developed as part of the GGC ITEC 4810 Information Technology Capstone and is distributed under the MIT License.
+This project is open-source and distributed under the [MIT License](LICENSE).

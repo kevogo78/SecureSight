@@ -680,7 +680,7 @@ export default function EndpointDetailView({
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-3">
             <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
             <div className="text-xs text-slate-700 leading-relaxed">
-              <span className="font-bold text-slate-900">Cybersecurity Capstone Telemetry Policy: </span>
+              <span className="font-bold text-slate-900">Endpoint Observability Telemetry Policy: </span>
               Hardware keystroke logs and activity intensity (KPM) are captured directly by the endpoint agent via <code className="font-mono font-bold bg-slate-200 px-1 py-0.5 rounded">pynput</code> keyboard listener. Sensitive password inputs in blacklisted applications are automatically sanitized by the local DLP engine prior to cloud transmission.
             </div>
           </div>

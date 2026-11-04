@@ -113,7 +113,20 @@ class ConsentModal(QDialog):
     def __init__(self, default_server_url: str = None):
         super().__init__()
         self.consent_granted = False
-        default_url = default_server_url or os.environ.get("EDMT_SERVER_URL", "http://127.0.0.1:8000/api/v1/telemetry")
+        default_url = default_server_url or os.environ.get("EDMT_SERVER_URL", "")
+        if not default_url:
+            try:
+                import json
+                cfg_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "config", "config.json"))
+                if os.path.exists(cfg_path):
+                    with open(cfg_path, "r", encoding="utf-8") as cf:
+                        cfg_url = json.load(cf).get("server_url")
+                        if cfg_url and "<YOUR_" not in cfg_url:
+                            default_url = cfg_url
+            except Exception:
+                pass
+        if not default_url:
+            default_url = "http://127.0.0.1:8000/api/v1/telemetry"
         self.server_url = default_url
         self.endpoint_name = socket.gethostname()
         self.init_ui()
@@ -130,7 +143,7 @@ class ConsentModal(QDialog):
         layout.setSpacing(14)
 
         # Header with branding badge
-        header_badge = QLabel("SECURESIGHT • ITEC 4810 CAPSTONE")
+        header_badge = QLabel("SECURESIGHT • ENDPOINT OBSERVABILITY")
         header_badge.setStyleSheet("color: #34d399; font-size: 10px; font-weight: 800; letter-spacing: 1px;")
         layout.addWidget(header_badge)
 

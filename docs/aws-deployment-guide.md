@@ -101,7 +101,7 @@ psql -h <YOUR_RDS_ENDPOINT>.us-east-1.rds.amazonaws.com \
 Apply the relational schema from `database/schema.sql`:
 
 ```bash
-cd /home/ubuntu/ITEC4810_Capstone
+cd /home/ubuntu/SecureSight
 psql -h <YOUR_RDS_ENDPOINT>.us-east-1.rds.amazonaws.com \
      -U postgresadmin \
      -d postgres \
@@ -137,8 +137,8 @@ psql -h <YOUR_RDS_ENDPOINT>.us-east-1.rds.amazonaws.com \
 ### Clone Repository & Create Virtual Environment
 ```bash
 cd /home/ubuntu
-git clone https://github.com/<YOUR_GITHUB_USER>/ITEC4810_Capstone.git
-cd /home/ubuntu/ITEC4810_Capstone/backend
+git clone https://github.com/<YOUR_GITHUB_USER>/SecureSight.git
+cd /home/ubuntu/SecureSight/backend
 
 python3 -m venv venv
 source venv/bin/activate
@@ -148,7 +148,7 @@ deactivate
 ```
 
 ### Environment Variables Configuration
-Create the production environment configuration file at `/home/ubuntu/ITEC4810_Capstone/backend/.env`:
+Create the production environment configuration file from the template (`cp .env.example .env`) at `/home/ubuntu/SecureSight/backend/.env`:
 
 ```ini
 # Database Connection Settings
@@ -195,9 +195,9 @@ After=network.target
 [Service]
 User=ubuntu
 Group=ubuntu
-WorkingDirectory=/home/ubuntu/ITEC4810_Capstone/backend
-EnvironmentFile=/home/ubuntu/ITEC4810_Capstone/backend/.env
-ExecStart=/home/ubuntu/ITEC4810_Capstone/backend/venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 2
+WorkingDirectory=/home/ubuntu/SecureSight/backend
+EnvironmentFile=/home/ubuntu/SecureSight/backend/.env
+ExecStart=/home/ubuntu/SecureSight/backend/venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 2
 Restart=always
 RestartSec=5
 
@@ -221,7 +221,7 @@ sudo systemctl status endpoint-api --no-pager
 Compile the optimized production bundle with Vite and Tailwind CSS v4:
 
 ```bash
-cd /home/ubuntu/ITEC4810_Capstone/dashboard
+cd /home/ubuntu/SecureSight/dashboard
 npm install
 npm run build
 ```
@@ -329,7 +329,7 @@ sudo systemctl restart nginx
 Whenever updates are pushed to the GitHub repository, execute the automated deployment script on your EC2 instance:
 
 ```bash
-cd /home/ubuntu/ITEC4810_Capstone
+cd /home/ubuntu/SecureSight
 chmod +x scripts/deploy-ec2.sh
 ./scripts/deploy-ec2.sh
 ```

@@ -10,6 +10,7 @@ The **SecureSight Client Agent** is an autonomous desktop background application
 agent/
 ├── README.md               # Architecture, module, and usage documentation
 ├── README_INSTALLATION.txt # Quick installation notes for enterprise workstations
+├── .env.example            # Environment configuration template
 ├── assets/                 # SecureSight official branding logos & iconography
 │   ├── README.md           # Branding usage and PyInstaller asset bundling guide
 │   └── securesight-logo.png # High-resolution SecureSight shield logo
@@ -77,7 +78,8 @@ When a screen capture is triggered (every 6th cycle / ~60 seconds):
 
 ## ⚙️ Configuration Setup
 
-Edit `agent/config/config.json`:
+### Option A: JSON Configuration (`agent/config/config.json`)
+Copy the template if needed (`cp config.example.json config.json`) and configure:
 
 ```json
 {
@@ -85,33 +87,58 @@ Edit `agent/config/config.json`:
   "server_url": "http://<YOUR_EC2_PUBLIC_IP>/api/v1/telemetry",
   "polling_interval_seconds": 10,
   "screenshot_frequency_ticks": 6,
-  "crypto_key_hex": "<YOUR_64_CHAR_HEX_AES_256_KEY>",
+  "crypto_key_hex": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "interval_ms": 10000,
   "enable_keystrokes": true,
   "capture_keys_to_file": true,
-  "s3_bucket_name": "endpoint-monitor-media-076429319550-us-east-1-an"
+  "s3_bucket_name": "<YOUR_S3_BUCKET_NAME>"
 }
+```
+
+### Option B: Environment Variables (`.env`)
+You can optionally create an `.env` file in `agent/` from `.env.example`:
+
+```ini
+EDMT_SERVER_URL=http://<YOUR_EC2_PUBLIC_IP>/api/v1/telemetry
+EDMT_CRYPTO_KEY_HEX=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+S3_BUCKET_NAME=<YOUR_S3_BUCKET_NAME>
+AWS_REGION=us-east-1
 ```
 
 ---
 
 ## 🚀 Running the Agent
 
-### Step 1: Virtual Environment
+### 1-Click Launchers (Recommended)
+- **Windows**: Double-click `install_agent_windows.bat`
+- **macOS**: Double-click `install_agent_mac.command` (or run `bash install_agent_mac.sh`)
+
+### Manual Terminal Setup
+
+#### Step 1: Create and Activate Virtual Environment
 ```bash
 cd agent
+
+# On Linux/macOS:
+python3 -m venv venv
+source venv/bin/activate
+
+# On Windows (PowerShell):
 python -m venv venv
-source venv/bin/activate       # Linux/macOS
-# .\venv\Scripts\Activate.ps1   # Windows PowerShell
+.\venv\Scripts\Activate.ps1
+```
+
+#### Step 2: Install Dependencies
+```bash
 pip install -r requirements.txt
 ```
 
-### Step 2: Launch Orchestrator
+#### Step 3: Launch Agent
 ```bash
-python -m src.main
+python run_agent.py
 ```
 
-1. **Consent Dialog**: The SecureSight consent dialog displays the workstation hostname and target server URL. The user clicks **"I Consent & Authorize"**.
+1. **Consent Dialog**: The SecureSight consent dialog displays the workstation hostname and target server URL. Verify your EC2 URL, check the authorization box, and click **"Start Monitoring"**.
 2. **Background Mode**: The agent registers with `/api/v1/endpoints/register` and minimizes to the system tray with the SecureSight shield icon.
 3. **Autonomy Controls**: The user can pause or resume monitoring anytime via the tray menu.
 4. **Clean Exit**: Selecting **"Exit Agent"** flushes a final snapshot and notifies the backend to mark the workstation **Offline** immediately.
@@ -125,4 +152,4 @@ Run unit tests for the DLP regex engine, cryptographic modules, and activity tra
 ```bash
 pytest agent/tests -v
 ```
-*(All 36 tests pass across activity tracking, crypto, decryption validation, privacy filtering, and S3 uploading).*
+*(All tests pass across activity tracking, crypto, decryption validation, privacy filtering, and S3 uploading).*

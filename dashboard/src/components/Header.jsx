@@ -52,7 +52,7 @@ export default function Header({
             <div className="absolute right-0 mt-2 w-52 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2 animate-fadeIn z-50">
               <div className="px-3 py-2 border-b border-slate-100 mb-1">
                 <p className="text-xs font-bold text-slate-900">Signed in as</p>
-                <p className="text-xs text-slate-500 truncate">administrator@capstone.ggc</p>
+                <p className="text-xs text-slate-500 truncate">admin@securesight.local</p>
               </div>
               <button
                 onClick={() => { onNavigate('reports'); setShowProfileMenu(false); }}

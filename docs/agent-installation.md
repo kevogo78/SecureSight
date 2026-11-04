@@ -30,14 +30,14 @@ It is best practice to install agent dependencies within an isolated virtual env
 
 **On Windows (PowerShell):**
 ```powershell
-cd C:\path\to\ITEC4810_Capstone\agent
+cd C:\path\to\SecureSight\agent
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 ```
 
 **On macOS / Linux (Bash):**
 ```bash
-cd /path/to/ITEC4810_Capstone/agent
+cd /path/to/SecureSight/agent
 python3 -m venv venv
 source venv/bin/activate
 ```

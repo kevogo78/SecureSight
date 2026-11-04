@@ -2,9 +2,10 @@
 set -e
 
 # Exit immediately if a command exits with a non-zero status
-# Professional deployment script for pulling code, building frontend, and restarting services
+# Production deployment script for pulling code, building frontend, and restarting services
 
-APP_DIR="/home/ubuntu/ITEC4810_Capstone"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="${APP_DIR:-$(dirname "$SCRIPT_DIR")}"
 WEB_ROOT="/usr/share/nginx/html"
 
 echo "=== [1/5] Pulling Latest Commits from GitHub ==="

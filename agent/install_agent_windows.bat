@@ -1,11 +1,11 @@
 @echo off
 setlocal EnableDelayedExpansion
-title EDMT Endpoint Monitor & Consent UI Installer - Windows
+title SecureSight Endpoint Monitor & Consent UI Installer - Windows
 color 0A
 
 echo =====================================================================
-echo   Endpoint Device Monitor (EDMT) - Windows 1-Click Installer
-echo   Georgia Gwinnett College - ITEC 4810 Capstone
+echo   SecureSight Client Agent - Windows 1-Click Installer
+echo   SecureSight Endpoint Observability Platform
 echo =====================================================================
 echo.
 

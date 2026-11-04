@@ -406,7 +406,7 @@ class ActivityTracker:
         if url_match:
             return url_match.group(1).rstrip('/')
 
-        # 2. Domain pattern in title (e.g. "portal.ggc.edu", "github.com/project", "aws.amazon.com/console")
+        # 2. Domain pattern in title (e.g. "portal.example.edu", "github.com/project", "aws.amazon.com/console")
         domain_match = re.search(
             r'\b((?:[a-zA-Z0-9-]+\.)+(?:com|org|net|io|edu|gov|co|ai|dev|app|cloud|tech|info|me|us|uk|ca|de|fr|jp|au)(?:/[a-zA-Z0-9_.~!*\'();:@&=+$,/?%#-]*)?)\b',
             window_title,

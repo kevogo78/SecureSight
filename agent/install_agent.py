@@ -2,7 +2,7 @@
 """
 Cross-Platform Endpoint Agent & Consent UI Installer
 Works on: Windows, macOS, Linux
-Author: ITEC 4810 Capstone Team
+Author: SecureSight Team
 
 Automatically verifies Python environment, installs all required dependencies
 (psutil, Pillow, cryptography, requests, PyQt6, pynput, and pywin32 on Windows),

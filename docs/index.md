@@ -109,7 +109,7 @@ Explore the complete technical documentation:
 ## ⚙️ Repository Structure
 
 ```
-ITEC4810_Capstone/
+SecureSight/
 ├── agent/                 # SecureSight client desktop agent
 │   ├── assets/            # SecureSight branding artwork & icons
 │   ├── config/            # Blacklist definitions & endpoint configuration

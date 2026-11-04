@@ -129,7 +129,7 @@ def test_telemetry_website_url_indexing():
         "endpoint_id": 66,
         "active_app": "chrome.exe",
         "app_category": "Browsing",
-        "website_url": "github.com/ITEC4810/Project",
+        "website_url": "github.com/SecureSight/Project",
         "keystroke_count": 42,
         "cpu_percent": 12.0,
         "ram_percent": 34.0,
@@ -143,7 +143,7 @@ def test_telemetry_website_url_indexing():
     assert logs_res.status_code == 200
     logs = logs_res.json()
     assert any(
-        l.get("endpoint_id") == 66 and l.get("website_url") == "github.com/ITEC4810/Project"
+        l.get("endpoint_id") == 66 and l.get("website_url") == "github.com/SecureSight/Project"
         for l in logs
     )
 

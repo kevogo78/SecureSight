@@ -158,7 +158,7 @@ def test_extract_website_url():
 
     # 2. Domain pattern in title
     assert ActivityTracker.extract_website_url("msedge.exe", "AWS Console - aws.amazon.com/console") == "aws.amazon.com/console"
-    assert ActivityTracker.extract_website_url("firefox.exe", "Student Portal - portal.ggc.edu") == "portal.ggc.edu"
+    assert ActivityTracker.extract_website_url("firefox.exe", "Student Portal - portal.example.edu") == "portal.example.edu"
 
     # 3. Known web platform brand resolution in browser
     assert ActivityTracker.extract_website_url("chrome.exe", "Stack Overflow - Questions - Google Chrome") == "stackoverflow.com"

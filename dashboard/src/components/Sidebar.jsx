@@ -12,7 +12,7 @@ export default function Sidebar({ activeTab, onTabChange, onLogout, endpointsCou
         <div className="px-4 py-5 border-b border-emerald-900/40">
           <h1 className="sr-only">SecureSight</h1>
           <img src="/branding/securesight-logo.png" alt="SecureSight — Visibility. Security. Control." className="w-full h-auto" />
-          <p className="text-[10px] text-center text-emerald-400 font-semibold tracking-wider uppercase">ITEC4810 Capstone</p>
+          <p className="text-[10px] text-center text-emerald-400 font-semibold tracking-wider uppercase">Endpoint Observability</p>
         </div>
 
         {/* Navigation Links */}

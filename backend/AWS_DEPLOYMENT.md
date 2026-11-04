@@ -1,4 +1,4 @@
-# Deploy the compatible EC2 API
+# Deploy the Compatible EC2 API
 
 Prepared for `/var/www/endpoint-monitor/main.py`, managed by
 `endpoint-api.service` with two workers. This is a separate backend from
@@ -66,21 +66,21 @@ curl -i 'http://127.0.0.1:8000/api/v1/audit/logs?limit=5'
 sudo journalctl -u endpoint-api.service -n 50 --no-pager
 ```
 
-Then open `http://52.91.191.168/api/v1/endpoints` and
-`http://52.91.191.168/api/v1/audit/logs?limit=5`. Both should return JSON.
+Then open `http://<YOUR_EC2_PUBLIC_IP>/api/v1/endpoints` and
+`http://<YOUR_EC2_PUBLIC_IP>/api/v1/audit/logs?limit=5`. Both should return JSON.
 The existing /api/ Nginx proxy should continue to work. `/openapi.json` and
 `/health` at the public address currently fall through to the frontend; use
 the localhost URLs above unless explicit Nginx locations are added.
 
 ## Agent and dashboard
 
-Run the updated Windows agent with the Python 3.11 virtual environment:
+Run the updated Windows agent:
 
 ```powershell
-.\.venv311\Scripts\python.exe agent\run_agent.py
+python agent\run_agent.py
 ```
 
-In its consent dialog use `http://52.91.191.168/api/v1/telemetry` for the
+In its consent dialog use `http://<YOUR_EC2_PUBLIC_IP>/api/v1/telemetry` for the
 current test deployment, or the deployed HTTPS hostname when configured.
 Keep the real, unique computer hostname. Within seconds the deployed API
 should report it. The frontend must be rebuilt and deployed from a branch
@@ -128,7 +128,7 @@ presenting encrypted bytes as an image.
 ## Local checks
 
 ```powershell
-.\.venv311\Scripts\python.exe -m unittest discover -s backend/tests -p test_aws_compatibility.py -v
+python -m unittest discover -s backend/tests -p test_aws_compatibility.py -v
 ```
 
 These tests mock PostgreSQL and S3. Actual migration, service environment,
