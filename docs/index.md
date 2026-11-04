@@ -125,7 +125,7 @@ SecureSight/
 ├── database/              # PostgreSQL database initialization scripts
 │   ├── schema.sql         # Relational schema (tables, foreign keys, indices)
 │   └── seed.sql           # Default admin users, cleanup, and privacy rules
-├── docs/                  # Project documentation (Jekyll & Markdown)
+├── docs/                  # Technical project documentation (Markdown)
 └── scripts/               # Automation & deployment shell scripts
     ├── deploy-ec2.sh      # Automated EC2 pull, build, and restart script
     └── init-rds.sh        # RDS PostgreSQL schema initialization script

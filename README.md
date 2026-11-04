@@ -110,7 +110,7 @@ SecureSight/
 ├── database/              # PostgreSQL database initialization scripts
 │   ├── schema.sql         # Relational schema (tables, foreign keys, performance indices)
 │   └── seed.sql           # Default admin users, cleanup routines, and baseline privacy rules
-├── docs/                  # Project documentation (Jekyll & Markdown)
+├── docs/                  # Technical project documentation (Markdown)
 │   ├── index.md           # Documentation home
 │   ├── agent-installation.md # Client setup & configuration guide
 │   ├── aws-deployment-guide.md # Cloud infrastructure & NGINX reverse proxy deployment
